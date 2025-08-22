@@ -1,0 +1,1894 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NESS Tactical Command Console</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --primary-cyan: #00ffff;
+            --primary-green: #00ff41;
+            --primary-orange: #ff6b35;
+            --primary-blue: #0080ff;
+            --bg-dark: #0a0e1a;
+            --bg-panel: #0f1419;
+            --bg-card: #1a1f2e;
+            --border-glow: #00ffff;
+            --text-primary: #e0f6ff;
+            --text-secondary: #8cc8ff;
+            --text-accent: #00ffff;
+            --grid-color: rgba(0, 255, 255, 0.1);
+            --shadow-glow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        body {
+            background: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(0, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 75% 75%, rgba(0, 255, 65, 0.1) 0%, transparent 50%),
+                linear-gradient(90deg, transparent 49%, rgba(0, 255, 255, 0.03) 50%, transparent 51%),
+                linear-gradient(0deg, transparent 49%, rgba(0, 255, 255, 0.03) 50%, transparent 51%);
+            background-size: 100% 100%, 100% 100%, 20px 20px, 20px 20px;
+            color: var(--text-primary);
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 400;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 255, 255, 0.03) 2px,
+                    rgba(0, 255, 255, 0.03) 4px
+                );
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--bg-panel);
+            border: 2px solid var(--border-glow);
+            border-radius: 0;
+            box-shadow: 
+                var(--shadow-glow),
+                inset 0 0 50px rgba(0, 255, 255, 0.1);
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 2;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(45deg, transparent 49%, rgba(0, 255, 255, 0.1) 50%, transparent 51%),
+                linear-gradient(-45deg, transparent 49%, rgba(0, 255, 255, 0.1) 50%, transparent 51%);
+            background-size: 30px 30px;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        /* Header - Compacted */
+        .tactical-header {
+            background: linear-gradient(90deg, var(--bg-card), rgba(0, 255, 255, 0.1), var(--bg-card));
+            border-bottom: 2px solid var(--border-glow);
+            padding: 0.8rem 1.5rem;
+            position: relative;
+            z-index: 3;
+        }
+
+        .tactical-header h1 {
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            font-size: 1.6rem;
+            color: var(--primary-cyan);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin: 0;
+            text-shadow: 0 0 10px var(--primary-cyan);
+            animation: pulse-glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            from { text-shadow: 0 0 10px var(--primary-cyan); }
+            to { text-shadow: 0 0 20px var(--primary-cyan), 0 0 30px var(--primary-cyan); }
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-top: 0.3rem;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Tactical Labels - Compacted */
+        h1, h2, h3 {
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            color: var(--text-accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 0;
+        }
+
+        h2 {
+            font-size: 1.3rem;
+            border-bottom: 1px solid var(--border-glow);
+            padding-bottom: 0.4rem;
+            position: relative;
+            margin-bottom: 0.8rem;
+        }
+
+        h2::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 50px;
+            height: 2px;
+            background: var(--primary-orange);
+            box-shadow: 0 0 10px var(--primary-orange);
+        }
+
+        /* Form Elements - Highly Compacted */
+        label {
+            display: block;
+            margin-top: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+            position: relative;
+        }
+
+        label::before {
+            content: '▶';
+            color: var(--primary-cyan);
+            margin-right: 0.4rem;
+            font-size: 0.7rem;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            margin-top: 0.25rem;
+            padding: 0.5rem 0.7rem;
+            font-size: 0.9rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 500;
+            border: 2px solid rgba(0, 255, 255, 0.3);
+            border-radius: 0;
+            background: rgba(26, 31, 46, 0.8);
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--border-glow);
+            box-shadow: 
+                0 0 15px rgba(0, 255, 255, 0.5),
+                inset 0 0 10px rgba(0, 255, 255, 0.1);
+            background: rgba(26, 31, 46, 0.9);
+        }
+
+        input::placeholder, textarea::placeholder {
+            color: rgba(140, 200, 255, 0.6);
+            font-style: italic;
+        }
+
+        /* Tactical Buttons - Compacted */
+        button {
+            margin-top: 0.6rem;
+            padding: 0.5rem 1.2rem;
+            border: 2px solid var(--primary-cyan);
+            border-radius: 0;
+            background: linear-gradient(45deg, transparent, rgba(0, 255, 255, 0.1), transparent);
+            color: var(--primary-cyan);
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.3), transparent);
+            transition: left 0.5s ease;
+        }
+
+        button:hover {
+            background: rgba(0, 255, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        button:hover::before {
+            left: 100%;
+        }
+
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+        }
+
+        .paste-btn, .copy-btn {
+            padding: 0.35rem 0.7rem;
+            font-size: 0.7rem;
+            border-color: var(--primary-green);
+            color: var(--primary-green);
+            margin-top: 0;
+        }
+
+        .paste-btn:hover, .copy-btn:hover {
+            background: rgba(0, 255, 65, 0.2);
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+        }
+
+        /* Carousel System */
+        .carousel {
+            overflow: hidden;
+            flex: 1 1 auto;
+            display: flex;
+            align-items: stretch;
+            position: relative;
+        }
+
+        .carousel-track {
+            display: flex;
+            transition: transform 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            will-change: transform;
+            height: 100%;
+        }
+
+        .panel {
+            flex: 0 0 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            overflow: auto;
+            padding: 1rem;
+            position: relative;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 10% 10%, rgba(0, 255, 255, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 90% 90%, rgba(255, 107, 53, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* Top Controls - Compacted */
+        .top-controls {
+            position: sticky;
+            top: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            background: linear-gradient(90deg, var(--bg-panel), rgba(0, 255, 255, 0.05), var(--bg-panel));
+            padding: 0.6rem 0;
+            margin-bottom: 0.6rem;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.3);
+            z-index: 10;
+        }
+
+        .top-controls .left,
+        .top-controls .right {
+            display: flex;
+            gap: 0.4rem;
+            align-items: center;
+        }
+
+        /* Tactical Cards - Compacted */
+        .tactical-card {
+            background: linear-gradient(135deg, var(--bg-card), rgba(0, 255, 255, 0.05));
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 0;
+            padding: 1rem;
+            margin-bottom: 0.8rem;
+            position: relative;
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(0, 255, 255, 0.1);
+        }
+
+        .tactical-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--primary-cyan), var(--primary-green));
+            box-shadow: 0 0 8px var(--primary-cyan);
+        }
+
+        .tactical-card::after {
+            content: '';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            border: 2px solid var(--primary-orange);
+            border-radius: 50%;
+            background: var(--primary-orange);
+            box-shadow: 0 0 8px var(--primary-orange);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+        }
+
+        /* Quick Start Section - Compacted */
+        .quick-start {
+            background: linear-gradient(135deg, rgba(0, 255, 65, 0.1), rgba(0, 255, 255, 0.1));
+            border: 1px solid var(--primary-green);
+            padding: 1rem;
+            margin-bottom: 0.8rem;
+            position: relative;
+        }
+
+        .quick-start::before {
+            content: 'QUICK START PROTOCOL';
+            position: absolute;
+            top: -8px;
+            left: 15px;
+            background: var(--bg-panel);
+            color: var(--primary-green);
+            font-family: 'Orbitron', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0 8px;
+            letter-spacing: 1px;
+        }
+
+        .quick-start ol {
+            margin: 0 0 0 1.2rem;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        .quick-start li {
+            margin-bottom: 0.3rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .quick-start li b {
+            color: var(--primary-green);
+        }
+
+        /* Fieldset Styling - Compacted */
+        fieldset {
+            border: 1px solid rgba(0, 128, 255, 0.5);
+            padding: 0.8rem;
+            margin-top: 0.8rem;
+            background: rgba(0, 128, 255, 0.05);
+            position: relative;
+        }
+
+        legend {
+            color: var(--primary-blue);
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0 0.6rem;
+            background: var(--bg-panel);
+            font-size: 0.75rem;
+        }
+
+        /* Output Sections - Compacted */
+        .script-section {
+            margin-top: 1rem;
+        }
+
+        .script-section h3 {
+            color: var(--primary-orange);
+            border-left: 3px solid var(--primary-orange);
+            padding-left: 0.6rem;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        textarea[readonly], input[readonly] {
+            background: rgba(10, 14, 26, 0.8);
+            border-color: rgba(255, 107, 53, 0.5);
+            color: var(--primary-orange);
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Carousel Controls - Compacted */
+        .carousel-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1rem;
+            background: linear-gradient(90deg, var(--bg-panel), rgba(0, 255, 255, 0.05), var(--bg-panel));
+            border-top: 2px solid var(--border-glow);
+        }
+
+        .carousel-dots {
+            display: flex;
+            gap: 0.4rem;
+            align-items: center;
+        }
+
+        .carousel-dots .dot {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 2px solid rgba(0, 255, 255, 0.3);
+            border-radius: 0;
+            padding: 0.4rem 0.7rem;
+            cursor: pointer;
+            font-family: 'Orbitron', monospace;
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .carousel-dots .dot::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 100%;
+            background: rgba(0, 255, 255, 0.2);
+            transition: width 0.3s ease;
+        }
+
+        .carousel-dots .dot.active {
+            background: rgba(0, 255, 255, 0.2);
+            color: var(--primary-cyan);
+            border-color: var(--primary-cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+        }
+
+        .carousel-dots .dot.active::before {
+            width: 100%;
+        }
+
+        .carousel-dots .dot:hover {
+            border-color: var(--primary-cyan);
+            color: var(--primary-cyan);
+            transform: translateY(-2px);
+        }
+
+        /* Navigation Buttons - Compacted */
+        #prevPanel, #nextPanel, .nav-prev, .nav-next {
+            background: rgba(0, 255, 255, 0.1);
+            border: 2px solid var(--primary-cyan);
+            color: var(--primary-cyan);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        #prevPanel:hover, #nextPanel:hover, .nav-prev:hover, .nav-next:hover {
+            background: rgba(0, 255, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+            transform: scale(1.1);
+        }
+
+        /* Experimental Badge - Compacted */
+        .experimental-badge {
+            font-size: 0.6rem;
+            color: var(--primary-orange);
+            background: rgba(255, 107, 53, 0.2);
+            border: 1px solid var(--primary-orange);
+            padding: 0.15rem 0.5rem;
+            border-radius: 0;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            animation: glow-orange 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow-orange {
+            from { box-shadow: 0 0 5px var(--primary-orange); }
+            to { box-shadow: 0 0 15px var(--primary-orange), 0 0 25px var(--primary-orange); }
+        }
+
+        /* Help Text - Compacted */
+        .help-text {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+            line-height: 1.3;
+            font-style: italic;
+        }
+
+        .help-text code {
+            background: rgba(0, 255, 255, 0.1);
+            color: var(--primary-cyan);
+            padding: 0.1rem 0.3rem;
+            font-family: 'Courier New', monospace;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 800px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+            }
+            
+            .panel {
+                padding: 0.8rem;
+            }
+            
+            .tactical-header {
+                padding: 0.6rem;
+            }
+            
+            .tactical-header h1 {
+                font-size: 1.3rem;
+            }
+            
+            .carousel-controls {
+                padding: 0.8rem;
+            }
+            
+            .carousel-dots .dot {
+                padding: 0.3rem 0.5rem;
+                font-size: 0.65rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="tactical-header">
+            <h1>NESS Command Deck</h1>
+            <div class="status-bar">
+                <span>PRIVATENESS.NETWORK © 2025</span>
+            </div>
+        </header>
+
+        <div class="carousel-controls" aria-label="Section Navigation (Top)">
+            <button type="button" id="topPrevPanel" aria-label="Previous">◀</button>
+            <div class="carousel-dots" id="topCarouselDots" aria-label="Sections"></div>
+            <button type="button" id="topNextPanel" aria-label="Next">▶</button>
+        </div>
+
+        <div class="carousel" aria-live="polite">
+            <div class="carousel-track" id="carouselTrack">
+                <!-- Panel 1: Node Setup -->
+                <section class="panel" id="panel-wizard" aria-label="Node Setup">
+                    <div class="top-controls">
+                        <div class="left">
+                            <button type="button" class="nav-prev" aria-label="Previous">◀</button>
+                            <button type="button" class="nav-next" aria-label="Next">▶</button>
+                        </div>
+                        <div class="right">
+                            <div class="carousel-dots panel-dots" aria-label="Sections"></div>
+                        </div>
+                        
+                        <h2>Node Deployment Protocol</h2>
+                        
+                        <div class="tactical-card">
+                            <form id="wizard-form">
+                                <label>Master User Designation
+                                    <input type="text" id="masterUser" value="master01" placeholder="e.g., master01" pattern="^[a-zA-Z0-9._-]{3,32}$" title="3-32 chars: letters, numbers, dot, dash or underscore" required />
+                                </label>
+                                
+                                <label>Master Key Entropy Level
+                                    <input type="number" id="masterEntropy" value="128" placeholder="e.g., 128" min="32" max="4096" step="1" required />
+                                </label>
+                                
+                                <label>Node Network Address
+                                    <input type="url" id="nodeUrl" value="https://batman1.private.ness" placeholder="https://node.private.ness" pattern="^https?:\/\/[^\s]+$" title="Must start with http:// or https://" required />
+                                </label>
+                                
+                                <label>Node Tariff Rate (NCH/hour)
+                                    <input type="number" id="nodeTariff" value="1000" placeholder="e.g., 1000" min="0" step="1" required />
+                                </label>
+                                
+                                <label>Service Modules
+                                    <input type="text" id="nodeServices" value="uhe-prng,files,ipfs,dns" placeholder="uhe-prng,files,ipfs,dns" pattern="^[a-z0-9-]+(\s*,\s*[a-z0-9-]+)*$" title="Comma-separated lowercase service names (letters, numbers, dashes)" required />
+                                </label>
+                                
+                                <label>Network Protocols
+                                    <input type="text" id="nodeNetwork" value="inet" placeholder="inet,skywire,yggdrasil,i2p,tor" pattern="^[a-z0-9-]+(\s*,\s*[a-z0-9-]+)*$" title="Comma-separated: inet, skywire, yggdrasil, i2p, tor" required />
+                                    <div class="help-text">Available protocols: inet (clearnet), skywire, yggdrasil, i2p, tor</div>
+                                </label>
+                                
+                                <label>Node Entropy Configuration
+                                    <input type="number" id="nodeEntropy" value="128" placeholder="e.g., 128" min="32" max="4096" step="1" required />
+                                </label>
+                                
+                                <button type="submit">Initialize Deployment Script</button>
+                            </form>
+                            
+                            <div class="script-section" style="display:none;">
+                                <h3>Deployment Script Generated</h3>
+                                <textarea id="script-output" rows="10" readonly></textarea>
+                                <button id="download-btn">Download Script Package</button>
+                            </div>
+                        
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Panel 2: Governance -->
+                <section class="panel" id="panel-governance" aria-label="Governance">
+                    <div class="top-controls">
+                        <div class="left">
+                            <button type="button" class="nav-prev" aria-label="Previous">◀</button>
+                            <button type="button" class="nav-next" aria-label="Next">▶</button>
+                        </div>
+                        <div class="right">
+                            <div class="carousel-dots panel-dots" aria-label="Sections"></div>
+                        </div>
+                    </div>
+                    
+                    <h2>Governance and Multisig</h2>
+                    
+                    <div class="quick-start">
+                        <ol>
+                            <li><b>Set owners</b> and the threshold.</li>
+                            <li><b>Resolve owners</b> (EmerAPI) to fetch on-chain addresses.</li>
+                            <li><b>Enter signer public keys</b> (33‑byte 02/03) and generate.</li>
+                        </ol>
+                        <p class="help-text">Builds a governance manifest and multisig parameters. Owner addresses are fetched from EmerAPI; signer pubkeys are provided by participants.</p>
+                        
+                        <form id="gov-form">
+                            <label>Contract EmerNVS Identifier
+                                <div style="display:flex; gap:0.3em; align-items:center; width:100%;">
+                                    <input type="text" id="govName" placeholder="ness:dns-reverse-proxy-config" pattern="^[a-z0-9:_\.-]{3,128}$" title="EmerNVS name: lowercase letters, numbers, colon, underscore, dot or dash" required style="flex:1;" />
+                                    <button type="button" class="paste-btn" data-paste="govName" title="Paste from clipboard">Paste</button>
+                                </div>
+                            </label>
+                            
+                            <label>Authority Owners (EmerNVS labels)
+                                <div style="display:flex; gap:0.3em; align-items:center; width:100%;">
+                                    <input type="text" id="govOwners" placeholder="owner1.ness,owner2.ness,owner3.ness" pattern="^[a-z0-9:_\.-]+(\s*,\s*[a-z0-9:_\.-]+)*$" title="Comma-separated EmerNVS labels" required style="flex:1;" />
+                                    <button type="button" class="paste-btn" data-paste="govOwners" title="Paste from clipboard">Paste</button>
+                                </div>
+                            </label>
+                            
+                            <label>Signature Threshold (t)
+                                <input type="number" id="govThreshold" min="1" max="20" placeholder="2" required />
+                            </label>
+                            
+                            <label>Code CID (IPFS)
+                                <input type="text" id="govCodeCid" placeholder="bafy..." pattern="^(bafy[\w\d]+)?$" title="IPFS CID starting with bafy (optional)" />
+                            </label>
+                            
+                            <label>Executor URL (optional)
+                                <input type="url" id="govExecutorUrl" placeholder="https://executor.ness.cx/rpc" pattern="^https?:\/\/[^\s]+$" title="Must start with http:// or https://" />
+                            </label>
+                            
+                            <label>State Head CID (optional)
+                                <input type="text" id="govStateHead" placeholder="bafy..." pattern="^(bafy[\w\d]+)?$" title="IPFS CID starting with bafy (optional)" />
+                            </label>
+                            
+                            <label>Finalize State CID (optional)
+                                <input type="text" id="govStateFinal" placeholder="bafy..." pattern="^(bafy[\w\d]+)?$" title="IPFS CID starting with bafy (optional)" />
+                            </label>
+                            
+                            <fieldset>
+                                <legend>Advanced Configuration</legend>
+                                <label>Backend API Base (optional)
+                                    <input type="url" id="apiBase" placeholder="https://your.backend" pattern="^(https?:\/\/[^\s]+)?$" title="Optional. Must start with http:// or https://" />
+                                </label>
+                                
+                                <label>Owner API (EmerAPI GraphQL)
+                                    <input type="url" id="ownerApiBase" placeholder="https://emerapi.info/graphql" pattern="^https?:\/\/[^\s]+$" title="Must start with http:// or https://" />
+                                </label>
+                                
+                                <div style="display:flex; gap:0.4em; align-items:center; margin-top:0.4em;">
+                                    <button type="button" id="discoverOwnerApis">Discover via SRV</button>
+                                    <span id="discoverStatus" style="color:var(--text-secondary); font-size:0.8em;"></span>
+                                </div>
+                                
+                                <div id="ownerApiSuggestions" style="margin-top:0.4em; color:var(--text-secondary); font-size:0.8em;"></div>
+                                
+                                <p class="help-text">Owner API defaults to <code>https://emerapi.info/graphql</code>. Override or discover from SRV in <code>dns:doom.private.ness</code> (preferred) or <code>dns:private.ness</code> for <code>_emercoin-public-api._tcp</code>.</p>
+                            </fieldset>
+                            
+                            <label>Sequence Number (increment on updates)
+                                <input type="number" id="govSeq" min="1" max="1000000" placeholder="1" />
+                            </label>
+                            
+                            <div style="display:flex; gap:0.5em; flex-wrap:wrap; align-items:center;">
+                                <button type="button" id="resolveOwnersBtn">Resolve owners</button>
+                                <button type="submit">Generate manifest</button>
+                                <button type="button" id="useEmerApiDefault" title="Set Owner API to emerapi.info/graphql/graphql/graphql/graphql/graphql/graphql/graphql and save">Set EmerAPI default</button>
+                            </div>
+                        </form>
+
+                        <div id="gov-output" class="script-section" style="display:none;">
+                            <h3>Manifest (without auth)</h3>
+                            <textarea id="gov-manifest" rows="10" readonly></textarea>
+                            
+                            <h3>Canonical JSON</h3>
+                            <textarea id="gov-canon" rows="6" readonly></textarea>
+                            
+                            <h3>SHA-256 Hash</h3>
+                            <input id="gov-hash-hex" readonly placeholder="hex" />
+                            <input id="gov-hash-b64" readonly placeholder="base64" style="margin-top:0.4em;" />
+                            
+                            <h3>Owner Addresses (on‑chain)</h3>
+                            <textarea id="gov-owners" rows="4" readonly></textarea>
+                            <div style="display:flex; gap:0.4em; margin:0.3em 0 0.6em 0;">
+                                <button type="button" class="copy-btn" data-copy="gov-owners">Copy</button>
+                            </div>
+                        </div>
+
+                        <hr style="border:none; border-top:1px solid var(--border-color); margin:0.8rem 0;" />
+                        <h3>Multisig for EmerNVS (M-of-N) with optional weighted policy</h3>
+                        <form id="ms-form">
+                            <div style="display:flex; gap:0.8em; flex-wrap:wrap; align-items:flex-end;">
+                                <label style="flex:1; min-width:180px;">Signature Threshold (M)
+                                    <input type="number" id="msThreshold" min="1" max="20" placeholder="2" />
+                                </label>
+                                <div style="flex:3; min-width:260px;">
+                                    <label>Signer Public Keys (33‑byte; allow weight: pubkey[:weight])</label>
+                                    <div style="display:flex; gap:0.3em; align-items:flex-start;">
+                                        <textarea id="ms-signer-pubkeys" rows="3" placeholder="02..:2\n03..:1\n02.." style="font-family:monospace; font-size:0.9em; flex:1;" spellcheck="false"></textarea>
+                                        <button type="button" class="paste-btn" data-paste="ms-signer-pubkeys" title="Paste from clipboard">Paste</button>
+                                    </div>
+                                    <div class="help-text">Keys are 66-hex starting with 02/03. Optional weight integer after colon; weights are enforced off‑chain in policy.</div>
+                                </div>
+                                <div style="flex:2; min-width:220px;">
+                                    <label><input type="checkbox" id="msWeighted" /> Use weighted policy (off‑chain)</label>
+                                    <label>Weighted threshold units (optional)
+                                        <input type="number" id="msWeightedThreshold" min="1" placeholder="e.g., 3" />
+                                    </label>
+                                </div>
+                                <div style="flex:2; min-width:220px;">
+                                    <label>Target EmerNVS Name
+                                        <input id="nvsTarget" placeholder="dns/mydomain.emc" />
+                                    </label>
+                                </div>
+                                <div>
+                                    <button type="submit">Build Multisig Commands</button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div class="script-section" id="ms-output" style="display:none;">
+                            <h3>Multisig Commands</h3>
+                            <textarea id="ms-commands" rows="8" readonly></textarea>
+                            <div id="ms-policy" class="help-text" style="white-space:pre-wrap; margin-top:0.4rem;"></div>
+                        </div>
+
+                        <h3>Proposed New NVS Value</h3>
+                        <textarea id="nvsNewValue" rows="4" placeholder="Raw NVS value (JSON or text)"></textarea>
+                        <div style="display:flex; gap:0.5em; margin-top:0.4rem;">
+                            <button type="button" id="genUpdateCmds">Generate Update Commands</button>
+                            <button type="button" class="copy-btn" data-copy="ms-commands">Copy Commands</button>
+                        </div>
+
+                        <hr style="border:none; border-top:1px solid var(--border-color); margin:1rem 0;" />
+                        <h3>PSBT (Standard UTXO Spend)</h3>
+                        <div class="tactical-card" style="padding-top:0.6rem;">
+                            <div style="display:flex; gap:0.8em; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:260px;">
+                                    <label>Inputs (one per line: txid:vout)
+                                        <textarea id="psbtInputs" rows="4" placeholder="abcd..:0\nef01..:1" style="font-family:monospace;"></textarea>
+                                    </label>
+                                </div>
+                                <div style="flex:1; min-width:260px;">
+                                    <label>Outputs (one per line: addr:amount)
+                                        <textarea id="psbtOutputs" rows="4" placeholder="emc1...:1.234\nemc1...:0.5" style="font-family:monospace;"></textarea>
+                                    </label>
+                                </div>
+                                <div style="flex:1; min-width:220px;">
+                                    <label>Change address (optional)
+                                        <input id="psbtChange" placeholder="emc1..." />
+                                    </label>
+                                    <div class="help-text">Use walletcreatefundedpsbt to auto-pick inputs and change.</div>
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:0.5em; margin-top:0.5rem; flex-wrap:wrap;">
+                                <button type="button" id="genPsbtManual">Generate PSBT (manual createpsbt)</button>
+                                <button type="button" id="genPsbtFunded">Generate PSBT (walletcreatefundedpsbt)</button>
+                            </div>
+                            <div class="script-section" style="margin-top:0.6rem;">
+                                <h4>PSBT Command Block</h4>
+                                <textarea id="psbt-commands" rows="10" readonly></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+          
+            </div> <!-- /carousel-track -->
+        </div> <!-- /carousel -->
+
+        <div class="carousel-controls" aria-label="Section Navigation">
+            <button type="button" id="prevPanel" aria-label="Previous">◀</button>
+            <div class="carousel-dots" id="carouselDots" aria-label="Sections"></div>
+            <button type="button" id="nextPanel" aria-label="Next">▶</button>
+        </div>
+    </div>
+    
+    <script>
+        // Optional API bases for serverless/static hosting
+        (function initApiBase() {
+            const el = document.getElementById('apiBase');
+            if (!el) return;
+            try {
+                el.value = localStorage.getItem('apiBase') || '';
+            } catch {}
+            el.addEventListener('change', () => {
+                try {
+                    localStorage.setItem('apiBase', el.value.trim());
+                } catch {}
+            });
+        })();
+
+        // --- Multisig + NVS command builders (Govern panel) ---
+        function parseSigners(text, weighted) {
+            const entriesRaw = (text || '')
+                .split(/[\,\n\r\t ]+/)
+                .map(s => s.trim())
+                .filter(Boolean);
+            const entries = [];
+            for (const e of entriesRaw) {
+                const [pk, wRaw] = e.split(':');
+                if (!/^0[23][0-9a-fA-F]{64}$/.test(pk || '')) continue;
+                const w = weighted ? Math.max(1, parseInt(wRaw || '1', 10)) : 1;
+                entries.push({ pk: pk, w });
+            }
+            const keys = entries.map(x => x.pk);
+            const weights = entries.map(x => x.w);
+            const totalWeight = weights.reduce((a,b)=>a+b,0);
+            return { entries, keys, weights, totalWeight };
+        }
+
+        function buildMultisigCmds(t, pubkeys, targetName) {
+            const keysJson = JSON.stringify(pubkeys);
+            const lines = [];
+            lines.push(`# Create multisig (two variants):`);
+            lines.push(`emercoin-cli createmultisig ${t} '${keysJson}'`);
+            lines.push(`emercoin-cli addmultisigaddress ${t} '${keysJson}'`);
+            lines.push(`# Set EmerNVS ownership to the multisig address (replace <ADDR> with result):`);
+            if (targetName) {
+                lines.push(`emercoin-cli name_update "${targetName}" "<value-unchanged>" "" "<ADDR>"`);
+            } else {
+                lines.push(`# emercoin-cli name_update <nvsName> <value> "" <ADDR>`);
+            }
+            return lines.join('\n');
+        }
+
+        const msForm = document.getElementById('ms-form');
+        if (msForm) {
+            msForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const t = Math.max(1, parseInt(document.getElementById('msThreshold').value || '1', 10));
+                const weighted = !!document.getElementById('msWeighted')?.checked;
+                const wtThresh = Math.max(1, parseInt(document.getElementById('msWeightedThreshold')?.value || '1', 10));
+                const parsed = parseSigners(document.getElementById('ms-signer-pubkeys').value, weighted);
+                const target = (document.getElementById('nvsTarget')?.value || '').trim();
+                const out = document.getElementById('ms-commands');
+                const box = document.getElementById('ms-output');
+                const pol = document.getElementById('ms-policy');
+                if (!parsed.keys.length) {
+                    if (out) out.value = 'No valid pubkeys found. Expect 66-hex starting with 02/03.';
+                    if (pol) pol.textContent = '';
+                    if (box) box.style.display = '';
+                    return;
+                }
+                const cmds = buildMultisigCmds(t, parsed.keys, target);
+                if (out) out.value = cmds;
+                if (pol) {
+                    if (weighted) {
+                        pol.textContent = `Weighted policy (off-chain): total weight = ${parsed.totalWeight}, required >= ${wtThresh}. Entries: ` + parsed.entries.map(e=>`${e.pk.slice(0,10)}…:${e.w}`).join(', ');
+                    } else {
+                        pol.textContent = `M-of-N policy (on-chain): M=${t}, N=${parsed.keys.length}.`;
+                    }
+                }
+                if (box) box.style.display = '';
+            });
+        }
+
+        const genUpdBtn = document.getElementById('genUpdateCmds');
+        if (genUpdBtn) {
+            genUpdBtn.addEventListener('click', () => {
+                const target = (document.getElementById('nvsTarget')?.value || '').trim();
+                const newVal = (document.getElementById('nvsNewValue')?.value || '').replaceAll('"', '\\"');
+                const lines = [];
+                lines.push(`# Update EmerNVS (transfer optional to multisig address):`);
+                if (target) {
+                    if (newVal) {
+                        lines.push(`emercoin-cli name_update "${target}" "${newVal}"`);
+                    } else {
+                        lines.push(`emercoin-cli name_update "${target}" "<newValue>"`);
+                    }
+                    lines.push(`# or with ownership change:`);
+                    lines.push(`emercoin-cli name_update "${target}" "${newVal || '<newValue>'}" "" "<ADDR>"`);
+                } else {
+                    lines.push(`emercoin-cli name_update <nvsName> <newValue> "" <ADDR>`);
+                }
+                const out = document.getElementById('ms-commands');
+                const box = document.getElementById('ms-output');
+                if (out) out.value = lines.join('\n');
+                if (box) box.style.display = '';
+            });
+        }
+
+        // --- PSBT command generators ---
+        function parseInputsLines(text) {
+            const arr = [];
+            (text||'').split(/\n+/).forEach(line => {
+                const s = line.trim(); if (!s) return;
+                const m = s.split(':');
+                if (m.length !== 2) return;
+                const txid = m[0].trim();
+                const vout = parseInt(m[1].trim(), 10);
+                if (txid && Number.isFinite(vout)) arr.push({txid, vout});
+            });
+            return arr;
+        }
+        function parseOutputsLines(text) {
+            const obj = {};
+            (text||'').split(/\n+/).forEach(line => {
+                const s = line.trim(); if (!s) return;
+                const i = s.lastIndexOf(':');
+                if (i <= 0) return;
+                const addr = s.slice(0,i).trim();
+                const amt = parseFloat(s.slice(i+1).trim());
+                if (addr && Number.isFinite(amt)) obj[addr] = amt;
+            });
+            return obj;
+        }
+        function toJson(v) { return JSON.stringify(v); }
+
+        const genPsbtManual = document.getElementById('genPsbtManual');
+        if (genPsbtManual) {
+            genPsbtManual.addEventListener('click', () => {
+                const inputs = parseInputsLines(document.getElementById('psbtInputs')?.value || '');
+                const outputs = parseOutputsLines(document.getElementById('psbtOutputs')?.value || '');
+                const change = (document.getElementById('psbtChange')?.value || '').trim();
+                const lines = [];
+                lines.push(`# Create unsigned PSBT (manual inputs/outputs)`);
+                lines.push(`emercoin-cli createpsbt '${toJson(inputs)}' '${toJson(outputs)}' 0 true > unsigned.psbt`);
+                lines.push(`# Distribute unsigned.psbt to signers`);
+                lines.push(`# Each signer adds partial signatures:`);
+                lines.push(`emercoin-cli walletprocesspsbt "$(cat unsigned.psbt)" | jq -r .psbt > signed.part.psbt`);
+                lines.push(`# Coordinator combines and finalizes:`);
+                lines.push(`emercoin-cli combinepsbt "$(cat signed.part1.psbt)" "$(cat signed.part2.psbt)" > combined.psbt`);
+                lines.push(`emercoin-cli finalizepsbt "$(cat combined.psbt)" | tee finalized.json`);
+                lines.push(`HEX=$(jq -r .hex finalized.json)`);
+                lines.push(`emercoin-cli sendrawtransaction "$HEX"`);
+                const out = document.getElementById('psbt-commands');
+                if (out) out.value = lines.join('\n');
+            });
+        }
+        const genPsbtFunded = document.getElementById('genPsbtFunded');
+        if (genPsbtFunded) {
+            genPsbtFunded.addEventListener('click', () => {
+                const outputs = parseOutputsLines(document.getElementById('psbtOutputs')?.value || '');
+                const change = (document.getElementById('psbtChange')?.value || '').trim();
+                const opts = { includeWatching: true };
+                if (change) opts.changeAddress = change;
+                const lines = [];
+                lines.push(`# Create funded PSBT (wallet selects inputs/change)`);
+                lines.push(`emercoin-cli walletcreatefundedpsbt '[]' '${toJson(outputs)}' 0 '${toJson(opts)}' | jq -r .psbt > unsigned.psbt`);
+                lines.push(`# Distribute unsigned.psbt to signers`);
+                lines.push(`# Each signer adds partial signatures:`);
+                lines.push(`emercoin-cli walletprocesspsbt "$(cat unsigned.psbt)" | jq -r .psbt > signed.part.psbt`);
+                lines.push(`# Coordinator combines and finalizes:`);
+                lines.push(`emercoin-cli combinepsbt "$(cat signed.part1.psbt)" "$(cat signed.part2.psbt)" > combined.psbt`);
+                lines.push(`emercoin-cli finalizepsbt "$(cat combined.psbt)" | tee finalized.json`);
+                lines.push(`HEX=$(jq -r .hex finalized.json)`);
+                lines.push(`emercoin-cli sendrawtransaction "$HEX"`);
+                const out = document.getElementById('psbt-commands');
+                if (out) out.value = lines.join('\n');
+            });
+        }
+
+        (function initOwnerApi() {
+            const el = document.getElementById('ownerApiBase');
+            if (!el) return;
+            try {
+                el.value = localStorage.getItem('ownerApiBase') || 'https://emerapi.info/graphql/graphql';
+            } catch {
+                el.value = 'https://emerapi.info/graphql/graphql';
+            }
+            el.addEventListener('change', () => {
+                try {
+                    localStorage.setItem('ownerApiBase', el.value.trim() || 'https://emerapi.info/graphql');
+                } catch {}
+            });
+        })();
+
+        function apiFetch(path, options) {
+            const raw = (function() {
+                try {
+                    return localStorage.getItem('apiBase') || '';
+                } catch {
+                    return '';
+                }
+            })();
+            const base = raw ? raw.replace(/\/$/, '') : '';
+            const url = base + path; // path must start with '/'
+            return fetch(url, options);
+        }
+
+        function ownerApiFetch(path, options) {
+            const raw = (function() {
+                try {
+                    return localStorage.getItem('ownerApiBase') || 'https://emerapi.info/graphql';
+                } catch {
+                    return 'https://emerapi.info/graphql';
+                }
+            })();
+            const base = raw ? raw.replace(/\/$/, '') : 'https://emerapi.info/graphql';
+            const url = base + path; // path like '/graphql'
+            return fetch(url, options);
+        }
+
+        async function discoverOwnerApis() {
+            const status = document.getElementById('discoverStatus');
+            const list = document.getElementById('ownerApiSuggestions');
+            status.textContent = 'Discovering…';
+            list.textContent = '';
+            try {
+                const sources = ['dns:doom.private.ness', 'dns:private.ness'];
+                const candidates = [];
+                for (const src of sources) {
+                    const q = `query { callwalletfunction(method: "name_show", data: "{\\"name\\": \\\"${src}\\\"}") { answer } }`;
+                    const res = await ownerApiFetch('/graphql', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            query: q
+                        })
+                    });
+                    const js = await res.json();
+                    const ans = js && js.data && js.data.callwalletfunction && js.data.callwalletfunction.answer;
+                    const value = ans && ans.result && ans.result.value;
+                    if (!value) continue;
+                    const lines = String(value).split(/\n+/);
+                    for (const line of lines) {
+                        if (/_emercoin-public-api\._tcp/i.test(line)) {
+                            const m = line.match(/_emercoin-public-api\._tcp\s+\d+\s+\d+\s+(\d+)\s+([^\s]+)/i);
+                            if (m) {
+                                const port = m[1];
+                                const host = m[2].replace(/\.$/, '');
+                                const url = `https://${host}${port && port !== '443' ? ':'+port : ''}`;
+                                if (!candidates.includes(url)) candidates.push(url);
+                            }
+                        }
+                    }
+                }
+                if (!candidates.length) throw new Error('No SRV candidates found');
+                list.innerHTML = candidates.map(u => `<a href="#" data-url="${u}">${u}</a>`).join(' | ');
+                list.querySelectorAll('a').forEach(a => {
+                    a.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const u = a.getAttribute('data-url');
+                        const el = document.getElementById('ownerApiBase');
+                        el.value = u;
+                        try {
+                            localStorage.setItem('ownerApiBase', u);
+                        } catch {}
+                    });
+                });
+                status.textContent = `Found ${candidates.length} endpoint(s).`;
+            } catch (err) {
+                status.textContent = `Discovery error: ${err}`;
+            }
+        }
+
+        document.getElementById('discoverOwnerApis').addEventListener('click', discoverOwnerApis);
+        document.getElementById('useEmerApiDefault').addEventListener('click', () => {
+            const el = document.getElementById('ownerApiBase');
+            el.value = 'https://emerapi.info/graphql';
+            try {
+                localStorage.setItem('ownerApiBase', 'https://emerapi.info/graphql');
+            } catch {}
+        });
+
+        // Copy helpers
+        function attachCopyHandlers() {
+            document.querySelectorAll('.copy-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const targetId = btn.getAttribute('data-copy');
+                    const el = document.getElementById(targetId);
+                    const val = (el && (el.value || el.textContent || '')).toString();
+                    try {
+                        await navigator.clipboard.writeText(val);
+                        btn.textContent = 'Copied!';
+                        setTimeout(() => btn.textContent = 'Copy' + (btn.innerText.includes('Redeem') ? ' Redeem Script' : btn.innerText.includes('Bech32') ? ' Bech32' : btn.innerText.includes('P2SH') ? ' P2SH' : ''), 1200);
+                    } catch {
+                        /* ignore */
+                    }
+                });
+            });
+        }
+        attachCopyHandlers();
+
+        // Paste helpers
+        function attachPasteHandlers() {
+            document.querySelectorAll('.paste-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const targetId = btn.getAttribute('data-paste');
+                    const el = document.getElementById(targetId);
+                    if (!el) return;
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (typeof el.value === 'string') {
+                            if (el.tagName === 'TEXTAREA' && el.value.trim()) {
+                                el.value = (el.value + '\n' + text).trim();
+                            } else {
+                                el.value = text;
+                            }
+                            el.dispatchEvent(new Event('change', {
+                                bubbles: true
+                            }));
+                            el.dispatchEvent(new Event('blur', {
+                                bubbles: true
+                            }));
+                            el.focus();
+                        }
+                    } catch {
+                        // ignore if no clipboard permissions
+                    }
+                });
+            });
+        }
+        attachPasteHandlers();
+
+        // --- Input sanitization helpers ---
+        function sanitizeUserName(s) {
+            s = (s || '').trim();
+            s = s.replace(/[^a-zA-Z0-9._-]/g, '');
+            if (s.length > 32) s = s.slice(0, 32);
+            return s;
+        }
+
+        function sanitizeInt(v, min, max) {
+            let n = parseInt(v, 10);
+            if (isNaN(n)) n = min;
+            if (min != null && n < min) n = min;
+            if (max != null && n > max) n = max;
+            return n;
+        }
+
+        function sanitizeCsvLower(s, allowedRe) {
+            const seen = new Set();
+            const out = [];
+            (s || '').split(/[,\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean).forEach(x => {
+                if (!allowedRe.test(x)) return;
+                if (!seen.has(x)) {
+                    seen.add(x);
+                    out.push(x);
+                }
+            });
+            return out.join(',');
+        }
+
+        function sanitizeUrl(u) {
+            u = (u || '').trim();
+            if (!u) return '';
+            if (!/^https?:\/\//i.test(u)) return '';
+            try {
+                new URL(u);
+                return u;
+            } catch {
+                return '';
+            }
+        }
+
+        function sanitizeEmerNvsLabel(s) {
+            s = (s || '').trim().toLowerCase();
+            s = s.replace(/[^a-z0-9:_.-]/g, '');
+            if (s.length > 128) s = s.slice(0, 128);
+            return s;
+        }
+
+        function sanitizeIpfsCid(s) {
+            s = (s || '').trim();
+            if (!s) return '';
+            if (/^bafy[\w\d]+$/i.test(s)) return s.toLowerCase();
+            return '';
+        }
+
+        function sanitizePubkeysList(s) {
+            const parts = (s || '').trim().split(/[\s,]+/).map(x => x.trim()).filter(Boolean);
+            const valid = parts.filter(x => /^(02|03)[0-9a-fA-F]{64}$/.test(x)).map(x => x.toLowerCase());
+            return valid.join('\n');
+        }
+
+        function bindSanitizers() {
+            const set = (id, fn) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const apply = () => {
+                    const v = fn(el.value);
+                    if (el.value !== String(v)) el.value = v;
+                };
+                el.addEventListener('blur', apply);
+                el.addEventListener('change', apply);
+            };
+            // Wizard
+            set('masterUser', v => sanitizeUserName(v));
+            set('masterEntropy', v => sanitizeInt(v, 32, 4096));
+            set('nodeUrl', v => sanitizeUrl(v));
+            set('nodeTariff', v => sanitizeInt(v, 0, 1e9));
+            set('nodeServices', v => sanitizeCsvLower(v, /^[a-z0-9-]+$/));
+            set('nodeNetwork', v => sanitizeCsvLower(v, /^[a-z0-9-]+$/));
+            set('nodeEntropy', v => sanitizeInt(v, 32, 4096));
+            // Governance
+            set('govName', v => sanitizeEmerNvsLabel(v));
+            const ownersApply = () => {
+                const el = document.getElementById('govOwners');
+                const cleaned = sanitizeCsvLower(el.value, /^[a-z0-9:_.-]+$/);
+                if (el.value !== cleaned) el.value = cleaned;
+            };
+            document.getElementById('govOwners').addEventListener('blur', ownersApply);
+            document.getElementById('govOwners').addEventListener('change', ownersApply);
+            set('govThreshold', v => sanitizeInt(v, 1, 20));
+            set('govCodeCid', v => sanitizeIpfsCid(v));
+            set('govExecutorUrl', v => sanitizeUrl(v));
+            set('govStateHead', v => sanitizeIpfsCid(v));
+            set('govStateFinal', v => sanitizeIpfsCid(v));
+            set('apiBase', v => sanitizeUrl(v));
+            set('ownerApiBase', v => sanitizeUrl(v));
+            set('govSeq', v => sanitizeInt(v, 1, 1000000));
+            const pkApply = () => {
+                const el = document.getElementById('gov-signer-pubkeys');
+                if (!el) return;
+                const cleaned = sanitizePubkeysList(el.value);
+                if (el.value !== cleaned) el.value = cleaned;
+            };
+            document.getElementById('gov-signer-pubkeys') && document.getElementById('gov-signer-pubkeys').addEventListener('blur', pkApply);
+            document.getElementById('gov-signer-pubkeys') && document.getElementById('gov-signer-pubkeys').addEventListener('change', pkApply);
+            // Multisig form sanitizers
+            set('msThreshold', v => sanitizeInt(v, 1, 20));
+            const msPkApply = () => {
+                const el = document.getElementById('ms-signer-pubkeys');
+                if (!el) return;
+                const cleaned = sanitizePubkeysList(el.value);
+                if (el.value !== cleaned) el.value = cleaned;
+            };
+            document.getElementById('ms-signer-pubkeys') && document.getElementById('ms-signer-pubkeys').addEventListener('blur', msPkApply);
+            document.getElementById('ms-signer-pubkeys') && document.getElementById('ms-signer-pubkeys').addEventListener('change', msPkApply);
+        }
+        bindSanitizers();
+
+        function getWizardValuesSanitized() {
+            return {
+                masterUser: sanitizeUserName(document.getElementById('masterUser').value),
+                masterEntropy: String(sanitizeInt(document.getElementById('masterEntropy').value, 32, 4096)),
+                nodeUrl: sanitizeUrl(document.getElementById('nodeUrl').value),
+                nodeTariff: String(sanitizeInt(document.getElementById('nodeTariff').value, 0, 1e9)),
+                nodeServices: sanitizeCsvLower(document.getElementById('nodeServices').value, /^[a-z0-9-]+$/),
+                nodeNetwork: sanitizeCsvLower(document.getElementById('nodeNetwork').value, /^[a-z0-9-]+$/),
+                nodeEntropy: String(sanitizeInt(document.getElementById('nodeEntropy').value, 32, 4096))
+            };
+        }
+
+        function getGovValuesSanitized() {
+            return {
+                govName: sanitizeEmerNvsLabel(document.getElementById('govName').value),
+                govOwners: sanitizeCsvLower(document.getElementById('govOwners').value, /^[a-z0-9:_.-]+$/),
+                govThreshold: String(sanitizeInt(document.getElementById('govThreshold').value, 1, 20)),
+                govCodeCid: sanitizeIpfsCid(document.getElementById('govCodeCid').value),
+                govExecutorUrl: sanitizeUrl(document.getElementById('govExecutorUrl').value),
+                govStateHead: sanitizeIpfsCid(document.getElementById('govStateHead').value),
+                govStateFinal: sanitizeIpfsCid(document.getElementById('govStateFinal').value),
+                apiBase: sanitizeUrl(document.getElementById('apiBase').value),
+                ownerApiBase: sanitizeUrl(document.getElementById('ownerApiBase').value),
+                govSeq: String(sanitizeInt(document.getElementById('govSeq').value, 1, 1000000)),
+                govSignerPubkeys: sanitizePubkeysList(document.getElementById('gov-signer-pubkeys') ? document.getElementById('gov-signer-pubkeys').value : '')
+            };
+        }
+
+        // --- Carousel navigation ---
+        (function initCarousel() {
+            const track = document.getElementById('carouselTrack');
+            // Reorder panels to: Setup, Govern
+            const order = ['panel-wizard','panel-governance'];
+            order.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.parentElement === track) track.appendChild(el);
+            });
+            const panels = Array.from(document.querySelectorAll('.panel'));
+            let index = 0;
+
+            // Create dots in bottom controls
+            const dotsWrap = document.getElementById('carouselDots');
+            const labels = ['Setup', 'Govern'];
+            const labelFor = (i) => labels[i] || `Tab ${i+1}`;
+            const bottomDots = panels.map((_, i) => {
+                const b = document.createElement('button');
+                b.className = 'dot' + (i === 0 ? ' active' : '');
+                b.type = 'button';
+                b.textContent = labelFor(i);
+                b.setAttribute('aria-label', `Go to panel ${i+1}`);
+                b.addEventListener('click', () => {
+                    index = i;
+                    update();
+                });
+                dotsWrap.appendChild(b);
+                return b;
+            });
+
+            // Create dots in top controls
+            const topDotsWrap = document.getElementById('topCarouselDots');
+            const topDots = panels.map((_, i) => {
+                const b = document.createElement('button');
+                b.className = 'dot' + (i === 0 ? ' active' : '');
+                b.type = 'button';
+                b.textContent = labelFor(i);
+                b.setAttribute('aria-label', `Go to panel ${i+1}`);
+                b.addEventListener('click', () => {
+                    index = i;
+                    update();
+                });
+                topDotsWrap.appendChild(b);
+                return b;
+            });
+
+            // Create dots in each panel header
+            const headerDotsSets = Array.from(document.querySelectorAll('.panel-dots')).map(wrap => {
+                const set = panels.map((_, i) => {
+                    const b = document.createElement('button');
+                    b.className = 'dot' + (i === 0 ? ' active' : '');
+                    b.type = 'button';
+                    b.textContent = labelFor(i);
+                    b.setAttribute('aria-label', `Go to panel ${i+1}`);
+                    b.addEventListener('click', () => {
+                        index = i;
+                        update();
+                    });
+                    wrap.appendChild(b);
+                    return b;
+                });
+                return set;
+            });
+
+            function update() {
+                track.style.transform = `translateX(-${index*100}%)`;
+                bottomDots.forEach((d, i) => d.classList.toggle('active', i === index));
+                topDots.forEach((d, i) => d.classList.toggle('active', i === index));
+                headerDotsSets.forEach(set => set.forEach((d, i) => d.classList.toggle('active', i === index)));
+            }
+
+            function next() {
+                index = (index + 1) % panels.length;
+                update();
+            }
+
+            function prev() {
+                index = (index - 1 + panels.length) % panels.length;
+                update();
+            }
+
+            document.getElementById('nextPanel').addEventListener('click', next);
+            document.getElementById('prevPanel').addEventListener('click', prev);
+            // Top global controls
+            document.getElementById('topNextPanel').addEventListener('click', next);
+            document.getElementById('topPrevPanel').addEventListener('click', prev);
+            // Top nav buttons on each panel
+            document.querySelectorAll('.nav-next').forEach(b => b.addEventListener('click', next));
+            document.querySelectorAll('.nav-prev').forEach(b => b.addEventListener('click', prev));
+
+            // Keyboard arrows
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight') next();
+                else if (e.key === 'ArrowLeft') prev();
+            });
+
+            // Touch swipe
+            let startX = null,
+                startT = 0;
+            track.addEventListener('touchstart', (e) => {
+                if (!e.touches || !e.touches.length) return;
+                startX = e.touches[0].clientX;
+                startT = Date.now();
+            }, {
+                passive: true
+            });
+            track.addEventListener('touchend', (e) => {
+                if (startX == null) return;
+                const dx = (e.changedTouches && e.changedTouches[0].clientX || 0) - startX;
+                const dt = Date.now() - startT;
+                // simple threshold
+                if (Math.abs(dx) > 40 && dt < 600) {
+                    if (dx < 0) next();
+                    else prev();
+                }
+                startX = null;
+            });
+        })();
+
+        function wrapTextBash(str, width = 78) {
+            return str.split('\n').map(line => {
+                if (line.length <= width) return line;
+                let out = '',
+                    cur = '';
+                const tokens = line.match(/\$?\w+:[^ ]+|<[^>]+>|\S+|\s+/g) || [line];
+                for (const token of tokens) {
+                    if (cur.length + token.length > width) {
+                        out += cur.trimEnd() + '\n';
+                        cur = '';
+                    }
+                    cur += token;
+                }
+                return out + cur.trimEnd();
+            }).join('\n');
+        }
+
+        function generateScript(values) {
+            const homeKeysDir = '$HOME/.privateness-keys';
+            const usersKey = `${homeKeysDir}/users.key.json`;
+            const nodeKey = `${homeKeysDir}/node.key.json`;
+            const message = `Operation Successful\nRegister these 2 EmerNVS records and add an EmerDNS dns: record for your node URL (${values.nodeUrl}):\n$USER_NVS:$USER_WORM\n$NODE_NVS:$NODE_WORM\nGet coins: https://faucet.ness.cx\nRegister your records: https://nvs.ness.cx`;
+            return `#!/bin/bash\n\n# Ensure folder structure exists\nmkdir -p ~/go/src/github.com/ness-network/\ncd ~/go/src/github.com/ness-network/\n\n# 0. Ensure Python 3, pip3, and venv are installed\ncommand -v python3 >/dev/null 2>&1 || { echo >&2 'Python3 is not installed. Aborting.'; exit 1; }\ncommand -v pip3 >/dev/null 2>&1 || { echo >&2 'pip3 is not installed. Aborting.'; exit 1; }\npython3 -m venv venv && . venv/bin/activate\n\n# 1. Upgrade pip and install wheel\npip install --upgrade pip wheel\n\n# 2. Install all Python dependencies\npip install requests prettytable validators lxml pycryptodome pynacl random_word humanize charset-normalizer idna urllib3 certifi wcwidth cffi autopep8 pytest pyyaml pycodestyle iniconfig packaging pluggy pycparser\n\n# 3. Clone PrivatenessTools\ngit clone https://github.com/NESS-Network/PrivatenessTools || true\ncd PrivatenessTools\n\n# 4. Install requirements.txt (redundant but safe)\npip install -r requirements.txt\n\n# 5. Generate master user key\n./keygen user ${values.masterUser} ${values.masterEntropy}\n\n# 6. Generate node key\n./keygen node ${values.nodeUrl} ${values.nodeTariff} ${values.nodeServices} ${values.nodeNetwork} ${values.nodeEntropy}\n\nUSER_NVS=$(./key nvs ${usersKey})\nUSER_WORM=$(./key worm ${usersKey})\nNODE_NVS=$(./key nvs ${nodeKey})\nNODE_WORM=$(./key worm ${nodeKey})\n\ncat <<EOF\n${wrapTextBash(message, 72)}\nEOF\n`;
+        }
+
+        document.getElementById('wizard-form').onsubmit = function(e) {
+            e.preventDefault();
+            const values = getWizardValuesSanitized();
+            const script = generateScript(values);
+            document.querySelector('.script-section').style.display = '';
+            document.getElementById('script-output').value = script;
+        };
+
+        document.getElementById('download-btn').onclick = function() {
+            const script = document.getElementById('script-output').value;
+            const blob = new Blob([script], {
+                type: 'text/x-sh'
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'nessnode-setup.sh';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        };
+
+        // --- Governance helpers ---
+        async function sha256Bytes(buf) {
+            const hash = await crypto.subtle.digest('SHA-256', buf);
+            return new Uint8Array(hash);
+        }
+
+        function toHex(bytes) {
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function toB64(bytes) {
+            let s = '';
+            for (const b of bytes) s += String.fromCharCode(b);
+            return btoa(s);
+        }
+
+        // Deep-sort object keys for canonical JSON (matches backend sort_keys=True)
+        function deepSort(obj) {
+            if (Array.isArray(obj)) return obj.map(deepSort);
+            if (obj && typeof obj === 'object') {
+                const out = {};
+                for (const k of Object.keys(obj).sort()) {
+                    out[k] = deepSort(obj[k]);
+                }
+                return out;
+            }
+            return obj;
+        }
+
+        function buildManifest(values) {
+            const owners = values.govOwners.split(',').map(s => s.trim()).filter(Boolean).map(nvs => ({
+                nvs
+            }));
+            const m = {
+                abi: "wasi-stdin-json@v1",
+                wasi_preview: "p2",
+                code_cid: values.govCodeCid || undefined,
+                executor_url: values.govExecutorUrl || undefined,
+                state_head_cid: values.govStateHead || undefined,
+                state_final_cid: values.govStateFinal || undefined,
+                policy: {
+                    version: 1,
+                    threshold: parseInt(values.govThreshold, 10) || 1,
+                    owners
+                },
+                seq: parseInt(values.govSeq, 10) || 1
+            };
+            // Remove undefined fields
+            Object.keys(m).forEach(k => m[k] === undefined && delete m[k]);
+            return m;
+        }
+
+        document.getElementById('gov-form').onsubmit = async function(e) {
+            e.preventDefault();
+            const values = getGovValuesSanitized();
+            const manifest = buildManifest(values);
+            const manifestNoAuth = manifest; // no auth section yet
+            const manifestStr = JSON.stringify(manifestNoAuth, null, 2);
+            const canon = JSON.stringify(deepSort(manifestNoAuth));
+            const enc = new TextEncoder();
+            const hashBytes = await sha256Bytes(enc.encode(canon));
+            document.getElementById('gov-output').style.display = '';
+            document.getElementById('gov-manifest').value = manifestStr;
+            document.getElementById('gov-canon').value = canon;
+            document.getElementById('gov-hash-hex').value = toHex(hashBytes);
+            document.getElementById('gov-hash-b64').value = toB64(hashBytes);
+
+            // Resolve on-chain owner addresses via EmerAPI GraphQL
+            const ownersCsv = (manifest.policy.owners || []).map(o => o.nvs).join(',');
+            let ownersInfo = '';
+            if (ownersCsv) {
+                try {
+                    const namesArr = (manifest.policy.owners || []).map(o => o.nvs);
+                    const qOne = (n) => `query { callwalletfunction(method: "name_show", data: "{\\"name\\": \\\"${n}\\\"}") { answer } }`;
+                    const results = await Promise.all(namesArr.map(async n => {
+                        const r = await ownerApiFetch('/graphql', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                query: qOne(n)
+                            })
+                        });
+                        const js = await r.json();
+                        const ans = js && js.data && js.data.callwalletfunction && js.data.callwalletfunction.answer;
+                        const addr = ans && ans.result && (ans.result.address || ans.result.owner);
+                        return {
+                            name: n,
+                            owner: addr || ''
+                        };
+                    }));
+                    ownersInfo = results.map(x => `${x.name} -> ${x.owner}`).join('\n');
+                } catch (err) {
+                    ownersInfo = `owner lookup error: ${err}`;
+                }
+            }
+            document.getElementById('gov-owners').value = ownersInfo.trim();
+
+            // Validate provided signer pubkeys map to owner addresses (P2PKH), then build script+addresses
+            const pkCsv = values.govSignerPubkeys;
+            const pkList = pkCsv ? pkCsv.split(/[\s,]+|\n+/).map(s => s.trim()).filter(Boolean) : [];
+            const namesArr = (manifest.policy.owners || []).map(o => o.nvs);
+            if (pkList.length && pkList.length === namesArr.length) {
+                try {
+                    const v = await apiFetch('/emer/validate_pubkeys', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            names: namesArr,
+                            pubkeys: pkList
+                        })
+                    });
+                    const vo = await v.json();
+                    const lines = (vo.matches || []).map(m => `${m.name} -> ${m.address} :: ${m.ok?'OK':'MISMATCH'}`);
+                    document.getElementById('gov-validate-out').textContent = lines.join('\n');
+                    const allOk = (vo.matches || []).every(m => m.ok);
+                    if (allOk) {
+                        const r = await apiFetch('/governance/redeemscript', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                m: parseInt(values.govThreshold, 10) || 1,
+                                pubkeys: pkList,
+                                type: 'both',
+                                net: {
+                                    bech32Hrp: 'emc',
+                                    p2shVer: 0x05
+                                }
+                            })
+                        });
+                        if (r.ok) {
+                            const out = await r.json();
+                            document.getElementById('gov-bech32').value = out.bech32 || '';
+                            document.getElementById('gov-p2sh').value = out.p2sh || '';
+                            document.getElementById('gov-redeem').value = out.redeemScriptHex || '';
+                        } else {
+                            document.getElementById('gov-redeem').value = `redeemscript error: ${r.status}`;
+                        }
+                    } else {
+                        document.getElementById('gov-redeem').value = 'Pubkey/address validation failed. Fix mismatches.';
+                    }
+                } catch (err) {
+                    document.getElementById('gov-validate-out').textContent = `validation error: ${err}`;
+                }
+            } else {
+                document.getElementById('gov-validate-out').textContent = 'Paste signer pubkeys (one per line or comma-separated), exactly one for each owner.';
+            }
+        };
+
+        // Multisig form: independent generation using pubkeys + threshold only
+        (function initMsForm() {
+            const form = document.getElementById('ms-form');
+            if (!form) return;
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const m = sanitizeInt(document.getElementById('msThreshold').value, 1, 20);
+                const pkCsv = sanitizePubkeysList(document.getElementById('ms-signer-pubkeys').value);
+                const pkList = pkCsv ? pkCsv.split(/[\s,]+|\n+/).map(s => s.trim()).filter(Boolean) : [];
+                if (!pkList.length) {
+                    document.getElementById('gov-validate-out').textContent = 'Paste signer pubkeys (one per line or comma-separated).';
+                    return;
+                }
+                try {
+                    const r = await apiFetch('/governance/redeemscript', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            m,
+                            pubkeys: pkList,
+                            type: 'both',
+                            net: {
+                                bech32Hrp: 'emc',
+                                p2shVer: 0x05
+                            }
+                        })
+                    });
+                    if (r.ok) {
+                        const out = await r.json();
+                        document.getElementById('gov-bech32').value = out.bech32 || '';
+                        document.getElementById('gov-p2sh').value = out.p2sh || '';
+                        document.getElementById('gov-redeem').value = out.redeemScriptHex || '';
+                        document.getElementById('gov-validate-out').textContent = `Generated for m=${m}, n=${pkList.length}.`;
+                    } else {
+                        document.getElementById('gov-redeem').value = `redeemscript error: ${r.status}`;
+                    }
+                } catch (err) {
+                    document.getElementById('gov-validate-out').textContent = `error: ${err}`;
+                }
+            });
+        })();
+
+        // Resolve owners button for simpler flow
+        document.getElementById('resolveOwnersBtn').addEventListener('click', async () => {
+            const values = {
+                govOwners: document.getElementById('govOwners').value,
+            };
+            const manifest = buildManifest({
+                govName: '',
+                govOwners: values.govOwners,
+                govThreshold: 1,
+                govCodeCid: '',
+                govExecutorUrl: '',
+                govStateHead: '',
+                govStateFinal: '',
+                govSeq: 1
+            });
+            const ownersInfo = await (async () => {
+                const namesArr = (manifest.policy.owners || []).map(o => o.nvs);
+                if (!namesArr.length) return '';
+                try {
+                    const qOne = (n) => `query { callwalletfunction(method: "name_show", data: "{\\"name\\": \\\"${n}\\\"}") { answer } }`;
+                    const results = await Promise.all(namesArr.map(async n => {
+                        const r = await ownerApiFetch('/graphql', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                query: qOne(n)
+                            })
+                        });
+                        const js = await r.json();
+                        const ans = js && js.data && js.data.callwalletfunction && js.data.callwalletfunction.answer;
+                        const addr = ans && ans.result && (ans.result.address || ans.result.owner);
+                        return {
+                            name: n,
+                            owner: addr || ''
+                        };
+                    }));
+                    return results.map(x => `${x.name} -> ${x.owner}`).join('\n');
+                } catch (err) {
+                    return `owner lookup error: ${err}`;
+                }
+            })();
+            document.getElementById('gov-output').style.display = '';
+            document.getElementById('gov-owners').value = ownersInfo.trim();
+        });
+
+        // --- SRV/DNS helpers ---
+        function parseNslookupOutput(text) {
+            const ipv4 = [];
+            const ipv6 = [];
+            const lines = text.split('\n');
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                // Look for "Address: " lines
+                if (trimmed.startsWith('Address: ')) {
+                    const ip = trimmed.substring(9).trim();
+                    if (ip.includes(':')) {
+                        ipv6.push(ip);
+                    } else if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+                        ipv4.push(ip);
+                    }
+                }
+                // Also look for bare IP addresses on their own lines
+                else if (/^\d+\.\d+\.\d+\.\d+$/.test(trimmed)) {
+                    ipv4.push(trimmed);
+                }
+                else if (/^[0-9a-fA-F:]+$/.test(trimmed) && trimmed.includes(':')) {
+                    ipv6.push(trimmed);
+                }
+            }
+            
+            return { ipv4: [...new Set(ipv4)], ipv6: [...new Set(ipv6)] };
+        }
+
+        async function queryRoundRobinIPs() {
+            const domain = document.getElementById('rrDomain').value.trim();
+            if (!domain) return;
+            
+            try {
+                // Try to use DNS over HTTPS (DoH) as fallback
+                const responses = await Promise.allSettled([
+                    fetch(`https://cloudflare-dns.com/dns-query?name=${domain}&type=A`, {
+                        headers: { 'Accept': 'application/dns-json' }
+                    }),
+                    fetch(`https://cloudflare-dns.com/dns-query?name=${domain}&type=AAAA`, {
+                        headers: { 'Accept': 'application/dns-json' }
+                    })
+                ]);
+                
+                const ipv4 = [];
+                const ipv6 = [];
+                
+                if (responses[0].status === 'fulfilled' && responses[0].value.ok) {
+                    const data = await responses[0].value.json();
+                    if (data.Answer) {
+                        data.Answer.forEach(record => {
+                            if (record.type === 1) { // A record
+                                ipv4.push(record.data);
+                            }
+                        });
+                    }
+                }
+                
+                if (responses[1].status === 'fulfilled' && responses[1].value.ok) {
+                    const data = await responses[1].value.json();
+                    if (data.Answer) {
+                        data.Answer.forEach(record => {
+                            if (record.type === 28) { // AAAA record
+                                ipv6.push(record.data);
+                            }
+                        });
+                    }
+                }
+                
+                document.getElementById('rr-ips4').value = ipv4.join('\n');
+                document.getElementById('rr-ips6').value = ipv6.join('\n');
+                document.getElementById('rr-ips').value = [...ipv4, ...ipv6].join('\n');
+                
+            } catch (err) {
+                document.getElementById('rr-ips').value = `DNS query failed: ${err.message}`;
+            }
+        }
+
+        function buildSrvRecords() {
+            const srvName = document.getElementById('srvName').value.trim();
+            const port = document.getElementById('srvPort').value;
+            const priority = document.getElementById('srvPriority').value;
+            const weight = document.getElementById('srvWeight').value;
+            const domain = document.getElementById('rrDomain').value.trim();
+            
+            const ipv4List = document.getElementById('rr-ips4').value.split('\n').filter(ip => ip.trim());
+            const ipv6List = document.getElementById('rr-ips6').value.split('\n').filter(ip => ip.trim());
+            
+            // Generate SRV records
+            const srvRecords = [];
+            if (ipv4List.length > 0 || ipv6List.length > 0) {
+                srvRecords.push(`${srvName} ${priority} ${weight} ${port} ${domain}`);
+            }
+            
+            // Generate A/AAAA records
+            const aRecords = [];
+            ipv4List.forEach(ip => {
+                aRecords.push(`${domain} A ${ip}`);
+            });
+            ipv6List.forEach(ip => {
+                aRecords.push(`${domain} AAAA ${ip}`);
+            });
+            
+            document.getElementById('srv-output').value = srvRecords.join('\n');
+            document.getElementById('a-output').value = aRecords.join('\n');
+        }
+
+        // Parse nslookup output when it changes
+        document.getElementById('rr-nslookup').addEventListener('input', () => {
+            const text = document.getElementById('rr-nslookup').value;
+            if (text.trim()) {
+                const parsed = parseNslookupOutput(text);
+                document.getElementById('rr-ips4').value = parsed.ipv4.join('\n');
+                document.getElementById('rr-ips6').value = parsed.ipv6.join('\n');
+                document.getElementById('rr-ips').value = [...parsed.ipv4, ...parsed.ipv6].join('\n');
+            }
+        });
+
+        document.getElementById('rrQueryBtn').addEventListener('click', queryRoundRobinIPs);
+        document.getElementById('buildSrvBtn').addEventListener('click', buildSrvRecords);
+        
+    </script>
+</body>
+
+</html>
