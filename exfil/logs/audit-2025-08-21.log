@@ -1,5 +1,0 @@
-{"ts":"2025-08-21T10:32:41.719Z","route":"/api/payments/verify","method":"POST","ip":"::1","error":"privateness-cli exit 1: Error: unknown command \"gettransaction\" for \"privateness-cli\"\nRun 'privateness-cli --help' for usage.\n"}
-{"ts":"2025-08-21T10:34:39.259Z","route":"/api/payments/verify","method":"POST","ip":"::1","error":"privateness-cli exit 1: Error: unknown command \"gettransaction\" for \"privateness-cli\"\nRun 'privateness-cli --help' for usage.\n"}
-{"ts":"2025-08-21T10:42:12.658Z","route":"/api/payments/verify","method":"POST","ip":"::1","error":"privateness-cli exit 1: Error: invalid txid\n"}
-{"ts":"2025-08-21T10:42:20.592Z","route":"/api/payments/verify","method":"POST","ip":"::1","error":"privateness-cli exit 1: Error: invalid txid\n"}
-{"ts":"2025-08-21T10:48:57.826Z","route":"/api/clean","method":"POST","ip":"::1","plan":"Starter","apiKeyId":"starter-1","error":"Writing of HTML files is not yet supported - /tmp/exfil-28lJdj/cleaned-exfil.html"}
