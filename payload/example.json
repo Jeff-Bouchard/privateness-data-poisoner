@@ -1,0 +1,18 @@
+{
+  "$schema": "./schema.json",
+  "name": "decoy-large-archive",
+  "version": "1.0.0",
+  "type": "archive",
+  "description": "Decoy archive metadata for manual, external deployment (no artifact included).",
+  "legal_note": "Use only in jurisdictions and contexts where lawful and ethical. Do not deploy without authorization.",
+  "uuid": "123e4567-e89b-12d3-a456-426614174000",
+  "uuid_name": "decoy-archive-uuid",
+  "sources": [
+    "internal-notes:research/lab/decoy-archives.md"
+  ],
+  "files": [
+    { "path": "D:/payloads/decoy-large-archive.zip", "size_estimate": ">10GB (expanded)", "note": "Decoy archive stored offline." }
+  ],
+  "deploy_instructions": "Distribute manually outside the extension. Do not configure the extension to serve artifacts.",
+  "tags": ["decoy", "archive", "manual"]
+}

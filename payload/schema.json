@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/max-poise/payload.schema.json",
+  "title": "Privateness.network Data Poisoner Payload Definition",
+  "type": "object",
+  "required": ["name", "version", "type", "description"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1, "examples": ["archive", "decoy", "document", "dataset"] },
+    "description": { "type": "string" },
+    "legal_note": { "type": "string" },
+    "sources": { "type": "array", "items": { "type": "string" } },
+    "fetch_url": { "type": "string", "format": "uri" },
+    "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "uuid": {
+      "type": "string",
+      "description": "Payload UUID (e.g., for correlation/tracking)",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "uuid_name": { "type": "string", "description": "Optional human-friendly alias for UUID" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["note"],
+        "properties": {
+          "path": { "type": "string" },
+          "url": { "type": "string" },
+          "size_estimate": { "type": ["string", "number"] },
+          "note": { "type": "string" }
+        },
+        "oneOf": [
+          { "required": ["path"] },
+          { "required": ["url"] }
+        ]
+      }
+    },
+    "deploy_instructions": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

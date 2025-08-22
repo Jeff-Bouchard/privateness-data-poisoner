@@ -1,0 +1,63 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_source","utm_medium","utm_campaign","utm_term","utm_content",
+              "utm_name","utm_id","utm_reader","utm_brand",
+              "fbclid","gclid","dclid","msclkid","wbraid","gbraid","yclid","ttclid","twclid",
+              "vero_conv","vero_id","mc_eid","mc_cid","icid","scid","s_cid","_hsenc","_hsmi",
+              "spm","aff_id","affid","affiliate","ref","referrer","sb_referer",
+              "pk_campaign","pk_kwd","oly_anon_id","oly_enc_id","li_fat_id"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "urlFilter": "|http*",
+      "resourceTypes": [
+        "main_frame","sub_frame","xmlhttprequest","script","image","stylesheet","font","media","other","ping"
+      ]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 2,
+    "action": { "type": "block" },
+    "condition": {
+      "requestDomains": [
+        "www.google-analytics.com","analytics.google.com","stats.g.doubleclick.net","ssl.google-analytics.com",
+        "api.segment.io","cdn.segment.com","segment.io",
+        "api.amplitude.com","amplitude.com","api2.amplitude.com",
+        "api.mixpanel.com","decide.mixpanel.com",
+        "bat.bing.com","px.ads.linkedin.com","analytics.tiktok.com","business-api.tiktok.com",
+        "connect.facebook.net","graph.facebook.com","snapads.com","cdn.branch.io","app.link",
+        "track.adform.net","ib.adnxs.com","idsync.rlcdn.com","collector.github.com"
+      ],
+      "resourceTypes": ["ping","xmlhttprequest","image","script","other"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": { "extensionPath": "/204.html" }
+    },
+    "condition": {
+      "regexFilter": "(?:^|\\/)collect(?:$|\\/)|\\/g\\/collect|\\/r\\/collect|\\/v1\\/batch|\\/events(?:$|\\/)|\\/track(?:$|\\/)|\\/pixel(?:$|\\/)|\\/p2(?:$|\\/)",
+      "resourceTypes": ["ping","xmlhttprequest","image","other"],
+      "excludedRequestDomains": [
+        "www.youtube.com","youtube.com","m.youtube.com",
+        "youtubei.googleapis.com","ytimg.com","i.ytimg.com",
+        "googlevideo.com","yt3.ggpht.com","yt3.googleusercontent.com"
+      ]
+    }
+  }
+]
