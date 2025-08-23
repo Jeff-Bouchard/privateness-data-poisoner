@@ -184,23 +184,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === 'POISONED_EVENT') {
-      // Count and store a concise log of page-world poisoning events
+      // Count and store a concise log of page-world poisoning events (no personal data)
       const { threats_countered = 0, threat_logs = [] } = await chrome.storage.local.get(['threats_countered','threat_logs']);
       const ev = message.event || {};
       const entry = {
         time: Date.now(),
         request: { url: ev.url || '', method: ev.method || 'beacon', initiator: ev.initiator || (sender?.url || '') },
-        client: {
-          ua: ev.ua || '',
-          platform: ev.platform || '',
-          win: !!ev.win,
-          tz: ev.tz || '',
-          lang: ev.lang || '',
-          screen: ev.screen || {}
-        },
-        referrer: ev.referrer || '',
         ruleId: 'poison',
-        action: ev.action || 'modify'
+        action: ev.action || 'modify',
+        preview: (typeof ev.preview === 'string' ? ev.preview : '')
       };
       const cfg = await getConfig();
       // Always increment counter
