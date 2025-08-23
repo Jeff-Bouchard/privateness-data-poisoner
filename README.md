@@ -1,5 +1,8 @@
 # Privateness.network — Data Protection (Manifest V3)
 
+![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-informational)
+![Minimum Chrome 100+](https://img.shields.io/badge/Chrome-%E2%89%A5100-green)
+
 Privacy extension for Chromium/Brave that reduces telemetry and fingerprinting. Three modes: Baseline, Moderate, Strict + Data Poisoning.
 
 ## Install (Brave/Chromium)
@@ -30,6 +33,14 @@ Privacy extension for Chromium/Brave that reduces telemetry and fingerprinting. 
 - `204.html` — empty page for safe redirects
 - `PRIVACY.md` — canonical Privacy Policy (rendered into HTML for download)
 - `privacy.html` — built HTML version of the Privacy Policy for download from the Options footer
+
+### Security model and hardening
+
+- MV3 default no-inline-scripts + strict CSP for extension pages:
+  - `content_security_policy.extension_pages`: `script-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'`
+- No dynamic code evaluation: no `eval`, no `new Function`, no string-arg timers.
+- DOM safety: user-controlled strings are rendered with `textContent` (no `innerHTML` for untrusted data).
+- Lint guardrails: ESLint rules enforce no-eval/no-implied-eval/no-new-func.
 
 ## Modes
 
@@ -106,3 +117,15 @@ Notes:
 - Terminate the service worker (Inspect → Terminate) after large changes.
 - Open the options page from the extension card; it uses `options_ui` (opens in a tab).
 - Toolbar icon uses PNG; if it doesn’t display crisply, provide 16/32/48/128 PNGs and map them in `manifest.json`.
+
+### Linting & quality
+
+- ESLint config `.eslintrc.json` is included. It forbids dynamic code execution (RCE-related patterns):
+  - `no-eval`, `no-implied-eval`, `no-new-func`, `no-script-url`.
+- Recommended: enable ESLint in your editor to see violations while editing.
+
+### Recent security hardening
+
+- Global RCE-resistance policy applied.
+- Added strict CSP to `manifest.json`.
+- Removed redundant HTML-escaping in `live.js` (now uses `textContent`).

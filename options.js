@@ -6,10 +6,10 @@ function normalizeMode(m){
   return 'moderate';
 }
 
-// Open the options page itself as a browser tab
-function openOptionsAsTab(){
+// Open the Live log page as a browser tab
+function openLiveLogTab(){
   try {
-    const url = chrome.runtime.getURL('options.html');
+    const url = chrome.runtime.getURL('live.html');
     window.open(url, '_blank', 'noopener');
   } catch {}
 }
@@ -48,6 +48,104 @@ async function copyPreview(){
   } catch {}
 }
 document.getElementById('previewCopy')?.addEventListener('click', copyPreview);
+
+// Whitelist choice modal wiring
+let WL_TARGET_URL = '';
+let WL_ON_DONE = null;
+function openWhitelistChooser(url, onDone){
+  try {
+    WL_TARGET_URL = String(url||'');
+    WL_ON_DONE = typeof onDone === 'function' ? onDone : null;
+    const modal = document.getElementById('wlModal');
+    const meta = document.getElementById('wlMeta');
+    if (meta){
+      try { const u = new URL(WL_TARGET_URL); meta.textContent = `${u.origin}${u.pathname}`; } catch { meta.textContent = WL_TARGET_URL; }
+    }
+    if (modal){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); }
+  } catch {}
+}
+function closeWhitelistChooser(){
+  try { const modal = document.getElementById('wlModal'); if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } WL_TARGET_URL=''; WL_ON_DONE=null; } catch {}
+}
+document.getElementById('wlClose')?.addEventListener('click', closeWhitelistChooser);
+document.getElementById('wlModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'wlModal') closeWhitelistChooser(); });
+document.getElementById('wlDomain')?.addEventListener('click', async ()=>{
+  const full = WL_TARGET_URL;
+  if (!full) return;
+  try {
+    const u = new URL(full);
+    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST', origin: u.origin });
+    if (res && res.ok){
+      updateWhitelist();
+      if (WL_ON_DONE) try { WL_ON_DONE(); } catch {}
+    }
+  } catch {}
+  closeWhitelistChooser();
+});
+document.getElementById('wlPath')?.addEventListener('click', async ()=>{
+  const full = WL_TARGET_URL;
+  if (!full) return;
+  try {
+    const u = new URL(full);
+    let pathKey = u.origin + u.pathname;
+    if (!pathKey.endsWith('/')) pathKey += '/';
+    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: pathKey });
+    if (res && res.ok){
+      updateWhitelistPaths();
+      if (WL_ON_DONE) try { WL_ON_DONE(); } catch {}
+    }
+  } catch {}
+  closeWhitelistChooser();
+});
+
+// Blacklist choice modal wiring
+let BL_TARGET_URL = '';
+let BL_ON_DONE = null;
+function openBlacklistChooser(url, onDone){
+  try {
+    BL_TARGET_URL = String(url||'');
+    BL_ON_DONE = typeof onDone === 'function' ? onDone : null;
+    const modal = document.getElementById('blModal');
+    const meta = document.getElementById('blMeta');
+    if (meta){
+      try { const u = new URL(BL_TARGET_URL); meta.textContent = `${u.origin}${u.pathname}`; } catch { meta.textContent = BL_TARGET_URL; }
+    }
+    if (modal){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); }
+  } catch {}
+}
+function closeBlacklistChooser(){
+  try { const modal = document.getElementById('blModal'); if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } BL_TARGET_URL=''; BL_ON_DONE=null; } catch {}
+}
+document.getElementById('blClose')?.addEventListener('click', closeBlacklistChooser);
+document.getElementById('blModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'blModal') closeBlacklistChooser(); });
+document.getElementById('blDomain')?.addEventListener('click', async ()=>{
+  const full = BL_TARGET_URL;
+  if (!full) return;
+  try {
+    const u = new URL(full);
+    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST', origin: u.origin });
+    if (res && res.ok){
+      updateBlacklist();
+      if (BL_ON_DONE) try { BL_ON_DONE(); } catch {}
+    }
+  } catch {}
+  closeBlacklistChooser();
+});
+document.getElementById('blPath')?.addEventListener('click', async ()=>{
+  const full = BL_TARGET_URL;
+  if (!full) return;
+  try {
+    const u = new URL(full);
+    let pathKey = u.origin + u.pathname;
+    if (!pathKey.endsWith('/')) pathKey += '/';
+    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATHS', path: pathKey });
+    if (res && res.ok){
+      updateBlacklistPaths();
+      if (BL_ON_DONE) try { BL_ON_DONE(); } catch {}
+    }
+  } catch {}
+  closeBlacklistChooser();
+});
 
 // Defunct names list UI
 function renderDefunctList(items){
@@ -128,6 +226,9 @@ async function loadConfig(){
   // Toggle visibility of Full log button based on audit mode
   const fullLogBtn = document.getElementById('fullLog');
   if (fullLogBtn) fullLogBtn.style.display = cfg.auditMode ? '' : 'none';
+  // Threat scope button initial label
+  const scopeBtn = document.getElementById('threatScope');
+  if (scopeBtn) scopeBtn.textContent = `Scope: ${cfg.statsPerTab ? 'This tab' : 'Global'}`;
   // Poisoning config (beta)
   const pc = mods.poisonConfig || {};
   const pcIds = ['poisonIncludeRid','poisonIncludeJitter','poisonIncludeFakePII'];
@@ -187,22 +288,18 @@ function renderLogs(logs){
     const tr = document.createElement('tr');
     function td(text){ const el = document.createElement('td'); el.style.padding = '6px 8px'; el.textContent = text; return el; }
     const t = new Date(l.time).toLocaleTimeString();
-    const u = (()=>{ try { const a=new URL(l.request?.url||''); return a.origin + a.pathname; } catch { return l.request?.url||''; } })();
     const r = String(l.ruleId || '');
     const isAudit = (String(l.action||'').toLowerCase()==='audit') || r.includes('(audit)');
     tr.appendChild(td(t));
-    // Column 2: Path (origin + pathname)
-    tr.appendChild(td(u));
-    // URL cell with tooltip for full URL (truncate at '?', prevent wrap)
+    // Column 2: URL (truncated; full on hover)
     {
       const urlTd = document.createElement('td');
       urlTd.style.padding = '6px 8px';
       urlTd.style.whiteSpace = 'nowrap';
       urlTd.style.overflow = 'hidden';
       urlTd.style.textOverflow = 'ellipsis';
-      urlTd.style.maxWidth = '520px';
       const fullUrl = l.request?.url || '';
-      const shown = (fullUrl || u).split('?')[0];
+      const shown = (fullUrl || '').split('?')[0];
       urlTd.textContent = shown;
       if (fullUrl) urlTd.title = fullUrl;
       tr.appendChild(urlTd);
@@ -220,26 +317,30 @@ function renderLogs(logs){
       ruleTd.style.whiteSpace = 'nowrap';
       tr.appendChild(ruleTd);
     }
-    // Action button: whitelist this exact path (origin+pathname)
+    // Action buttons: Whitelist and Blacklist choices
     const actionTd = document.createElement('td'); actionTd.style.padding = '6px 8px';
-    const btn = document.createElement('button');
-    btn.textContent = 'Whitelist path';
-    btn.style.padding = '4px 8px';
-    btn.title = 'Add origin+pathname to whitelist';
-    btn.addEventListener('click', async ()=>{
+    const wbtn = document.createElement('button');
+    wbtn.textContent = 'Whitelist…';
+    wbtn.style.padding = '4px 8px';
+    wbtn.title = 'Add to whitelist: choose domain or path';
+    const bbtn = document.createElement('button');
+    bbtn.textContent = 'Blacklist…';
+    bbtn.className = 'secondary';
+    bbtn.style.padding = '4px 8px';
+    bbtn.style.marginLeft = '8px';
+    bbtn.title = 'Add to blacklist: choose domain or path';
+    actionTd.appendChild(wbtn);
+    actionTd.appendChild(bbtn);
+    wbtn.addEventListener('click', ()=>{
       const full = l.request?.url || '';
       if (!full) return;
-      let pathKey = '';
-      try { const u = new URL(full); pathKey = u.origin + u.pathname; } catch { return; }
-      try {
-        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: pathKey });
-        if (res && res.ok) {
-          btn.textContent = 'Whitelisted'; btn.disabled = true;
-          updateWhitelistPaths();
-        }
-      } catch {}
+      openWhitelistChooser(full, ()=>{ wbtn.textContent = 'Whitelisted'; wbtn.disabled = true; });
     });
-    actionTd.appendChild(btn);
+    bbtn.addEventListener('click', ()=>{
+      const full = l.request?.url || '';
+      if (!full) return;
+      openBlacklistChooser(full, ()=>{ bbtn.textContent = 'Blacklisted'; bbtn.disabled = true; });
+    });
     tr.appendChild(actionTd);
     body.appendChild(tr);
   }
@@ -265,16 +366,29 @@ document.getElementById('save')?.addEventListener('click', saveConfig);
 // Threats counter
 async function updateThreats(){
   try {
-    const res = await chrome.runtime.sendMessage({ type: 'GET_STATS' });
+    // Determine scope
+    const cfgRes = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
+    const cfg = (cfgRes && cfgRes.ok) ? (cfgRes.config||{}) : {};
+    let tabId = undefined;
+    if (cfg.statsPerTab && chrome.tabs?.query) {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (Array.isArray(tabs) && tabs[0] && typeof tabs[0].id === 'number') tabId = tabs[0].id;
+      } catch {}
+    }
+    const res = await chrome.runtime.sendMessage({ type: 'GET_STATS', tabId });
     if (res && res.ok) {
       const el = document.getElementById('threats');
-      if (el) el.textContent = String(res.threats || 0);
+      if (el) el.textContent = String((cfg.statsPerTab && typeof res.perTab === 'number') ? res.perTab : (res.threats || 0));
+      // Update scope label
+      const scopeLabel = document.getElementById('threatsScopeLabel');
+      if (scopeLabel) scopeLabel.textContent = cfg.statsPerTab ? '(scope: this tab)' : '(scope: global)';
       // Keep audit button label in sync with count
       const auditBtn = document.getElementById('auditToggle');
       if (auditBtn){
         const on = auditBtn.classList.contains('on');
-        const count = res.threats || 0;
-        auditBtn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}${on ? ` — ${count} events` : ''}`;
+        const total = res.threats || 0;
+        auditBtn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}${on ? ` — ${total} events` : ''}`;
       }
     }
   } catch {}
@@ -332,7 +446,11 @@ function renderWhitelist(list){
     const li = document.createElement('li');
     li.style.margin = '4px 0';
     const code = document.createElement('code');
-    code.textContent = origin;
+    // Visualize domain allow as wildcard base (store remains 'https://base')
+    try {
+      const u = new URL(origin);
+      code.textContent = `${u.protocol}//*.${u.hostname}`;
+    } catch { code.textContent = origin.replace('://','://*.'); }
     const btn = document.createElement('button');
     btn.textContent = 'Remove';
     btn.style.marginLeft = '10px';
@@ -367,29 +485,135 @@ function renderWhitelistPaths(list){
   const items = Array.isArray(list) ? list : [];
   wlEmpty.style.display = items.length ? 'none' : '';
   for (const item of items){
-    const li = document.createElement('li');
-    li.style.margin = '4px 0';
-    const code = document.createElement('code');
-    code.textContent = item;
-    const btn = document.createElement('button');
-    btn.textContent = 'Remove';
-    btn.style.marginLeft = '10px';
-    btn.addEventListener('click', async () => {
+    const li = document.createElement('li'); li.style.margin = '4px 0';
+    const code = document.createElement('code'); code.textContent = item;
+    const edit = document.createElement('button'); edit.textContent = 'Edit'; edit.style.marginLeft = '10px';
+    edit.addEventListener('click', async ()=>{
+      try {
+        const next = prompt('Edit allowlisted path (origin+pathname, e.g., https://example.com/api):', item);
+        if (!next || next === item) return;
+        await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_WHITELIST_PATHS', path: item });
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: next });
+        if (res && res.ok) renderWhitelistPaths(res.whitelistPaths||[]);
+      } catch {}
+    });
+    const btn = document.createElement('button'); btn.textContent = 'Remove'; btn.style.marginLeft = '10px';
+    btn.addEventListener('click', async ()=>{
       try {
         const res = await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_WHITELIST_PATHS', path: item });
         if (res && res.ok) renderWhitelistPaths(res.whitelistPaths||[]);
       } catch {}
     });
-    li.appendChild(code);
-    li.appendChild(btn);
-    wlList.appendChild(li);
+    li.appendChild(code); li.appendChild(edit); li.appendChild(btn); wlList.appendChild(li);
   }
 }
 
 updateWhitelistPaths();
 setInterval(updateWhitelistPaths, 5000);
 
+// Blacklist management
+async function updateBlacklist(){
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'GET_BLACKLIST' });
+    if (res && res.ok) renderBlacklist(res.blacklist||[]);
+  } catch {}
+}
+
+function renderBlacklist(list){
+  const blList = document.getElementById('blList');
+  const blEmpty = document.getElementById('blEmpty');
+  if (!blList || !blEmpty) return;
+  blList.innerHTML = '';
+  const items = Array.isArray(list) ? list : [];
+  if (!items.length){ blEmpty.style.display = ''; return; }
+  blEmpty.style.display = 'none';
+  for (const origin of items){
+    const li = document.createElement('li');
+    li.style.margin = '4px 0';
+    const code = document.createElement('code');
+    try {
+      const u = new URL(origin);
+      code.textContent = `${u.protocol}//*.${u.hostname}`;
+    } catch { code.textContent = origin.replace('://','://*.'); }
+    const edit = document.createElement('button'); edit.textContent = 'Edit'; edit.style.marginLeft = '10px';
+    edit.addEventListener('click', async ()=>{
+      try {
+        const next = prompt('Edit blacklisted domain origin (e.g., https://example.com):', origin);
+        if (!next || next === origin) return;
+        await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_BLACKLIST', origin });
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST', origin: next });
+        if (res && res.ok) renderBlacklist(res.blacklist||[]);
+      } catch {}
+    });
+    const btn = document.createElement('button'); btn.textContent = 'Remove'; btn.style.marginLeft = '10px';
+    btn.addEventListener('click', async ()=>{
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_BLACKLIST', origin });
+        if (res && res.ok) renderBlacklist(res.blacklist||[]);
+      } catch {}
+    });
+    li.appendChild(code); li.appendChild(edit); li.appendChild(btn); blList.appendChild(li);
+  }
+}
+
+updateBlacklist();
+setInterval(updateBlacklist, 5000);
+
+// Blacklist paths management
+async function updateBlacklistPaths(){
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'GET_BLACKLIST_PATHS' });
+    if (res && res.ok) renderBlacklistPaths(res.blacklistPaths||[]);
+  } catch {}
+}
+
+function renderBlacklistPaths(list){
+  const blList = document.getElementById('blPathsList');
+  const blEmpty = document.getElementById('blPathsEmpty');
+  if (!blList || !blEmpty) return;
+  blList.innerHTML = '';
+  const items = Array.isArray(list) ? list : [];
+  blEmpty.style.display = items.length ? 'none' : '';
+  for (const item of items){
+    const li = document.createElement('li'); li.style.margin = '4px 0';
+    const code = document.createElement('code'); code.textContent = item;
+    const edit = document.createElement('button'); edit.textContent = 'Edit'; edit.style.marginLeft = '10px';
+    edit.addEventListener('click', async ()=>{
+      try {
+        const next = prompt('Edit blacklisted path (origin+pathname, e.g., https://example.com/api):', item);
+        if (!next || next === item) return;
+        await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_BLACKLIST_PATHS', path: item });
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATHS', path: next });
+        if (res && res.ok) renderBlacklistPaths(res.blacklistPaths||[]);
+      } catch {}
+    });
+    const btn = document.createElement('button'); btn.textContent = 'Remove'; btn.style.marginLeft = '10px';
+    btn.addEventListener('click', async ()=>{
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_BLACKLIST_PATHS', path: item });
+        if (res && res.ok) renderBlacklistPaths(res.blacklistPaths||[]);
+      } catch {}
+    });
+    li.appendChild(code); li.appendChild(edit); li.appendChild(btn); blList.appendChild(li);
+  }
+}
+
+updateBlacklistPaths();
+setInterval(updateBlacklistPaths, 5000);
+
 // Toggle handlers
+document.getElementById('threatScope')?.addEventListener('click', async ()=>{
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
+    const cfg = (res && res.ok) ? (res.config||{}) : {};
+    const next = { ...cfg, statsPerTab: !cfg.statsPerTab };
+    const btn = document.getElementById('threatScope');
+    if (btn) btn.textContent = `Scope: ${next.statsPerTab ? 'This tab' : 'Global'}`;
+    await chrome.runtime.sendMessage({ type: 'SET_CONFIG', config: { statsPerTab: next.statsPerTab } });
+    // Refresh counts and label immediately
+    updateThreats();
+  } catch {}
+});
 document.getElementById('benji')?.addEventListener('click', async (e)=>{
   const btn = e.currentTarget;
   btn.classList.toggle('on');
@@ -484,7 +708,7 @@ function escapeHtml(s){
 }
 
 document.getElementById('fullLog')?.addEventListener('click', openFullLog);
-document.getElementById('seeAsTab')?.addEventListener('click', openOptionsAsTab);
+document.getElementById('seeAsTab')?.addEventListener('click', openLiveLogTab);
 
 // Privacy Policy hover preview (CSP-safe; no inline script)
 document.addEventListener('DOMContentLoaded', ()=>{

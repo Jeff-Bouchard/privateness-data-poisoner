@@ -17,10 +17,18 @@ const DEFAULT_CONFIG = {
     blockBeacons: true,
     stripHeadersLimited: true
   },
+  // Show per-tab threats counter in UI (optional)
+  statsPerTab: false,
   // User-managed origins where poisoning/suppression should be disabled
   whitelist: [],
+  // Exact-origin captures for DNR initiator-based allow overrides
+  whitelistExactHosts: [],
   // User-managed exact path whitelist (origin + pathname, no query/fragment)
   whitelistPaths: [],
+  // User-managed blacklist: always block/override allow rules
+  blacklist: [],
+  // User-managed exact path blacklist (origin + pathname)
+  blacklistPaths: [],
   // Basic denylist used in page-world sendBeacon overrides and content-side logic
   denyHosts: [
     'www.google-analytics.com', 'analytics.google.com', 'stats.g.doubleclick.net',
@@ -38,8 +46,260 @@ const DEFAULT_CONFIG = {
   ]
 };
 
-// Ephemeral in-memory recent events (MV3 service worker may be suspended; this is best-effort)
+// Ephemeral in-memory recent events (kept for quick access), with persisted backup
 let RECENT_EVENTS = [];
+const RECENT_KEY = 'recent_events'; // persisted circular buffer
+const RECENT_MAX = 100;
+
+// Per-tab threats counter storage key
+const TAB_THREATS_KEY = 'tab_threats'; // { [tabId:number]: count }
+
+async function getTabThreats(){
+  try { const { tab_threats = {} } = await chrome.storage.local.get(TAB_THREATS_KEY); return (typeof tab_threats === 'object' && tab_threats) ? tab_threats : {}; } catch { return {}; }
+}
+async function setTabThreats(map){ try { await chrome.storage.local.set({ [TAB_THREATS_KEY]: map||{} }); } catch {} }
+async function incTabThreat(tabId){ try { if (typeof tabId !== 'number' || tabId < 0) return; const cfg = await getConfig(); if (!cfg.statsPerTab) return; const m = await getTabThreats(); m[tabId] = (m[tabId]||0) + 1; await setTabThreats(m); } catch {} }
+async function clearTabThreat(tabId){ try { const m = await getTabThreats(); if (tabId in m){ delete m[tabId]; await setTabThreats(m); } } catch {} }
+async function pushRecent(entry){
+  try {
+    RECENT_EVENTS = RECENT_EVENTS.concat(entry).slice(-RECENT_MAX);
+    const { recent_events = [] } = await chrome.storage.local.get(RECENT_KEY);
+    const next = recent_events.concat(entry).slice(-RECENT_MAX);
+    await chrome.storage.local.set({ [RECENT_KEY]: next });
+  } catch {}
+}
+async function clearRecent(){
+  try { RECENT_EVENTS = []; await chrome.storage.local.set({ [RECENT_KEY]: [] }); } catch {}
+}
+
+// Live log: manage subscribers and broadcast
+const LIVE_SUBS = new Set(); // each: { port, scope: 'global'|'tab', tabId: number|null, size: 25|50|100 }
+function snapshotRecent(size, scope, tabId){
+  try {
+    const arr = Array.isArray(RECENT_EVENTS) ? RECENT_EVENTS : [];
+    const filtered = scope === 'tab' && typeof tabId === 'number'
+      ? arr.filter(e => e && typeof e.tabId === 'number' && e.tabId === tabId)
+      : arr;
+    const n = [25,50,100].includes(size) ? size : 25;
+    return filtered.slice(-n);
+  } catch { return []; }
+}
+function broadcastLiveEvent(entry){
+  try {
+    for (const sub of Array.from(LIVE_SUBS)){
+      try {
+        if (sub.scope === 'tab') {
+          if (!(typeof sub.tabId === 'number' && typeof entry.tabId === 'number' && entry.tabId === sub.tabId)) continue;
+        }
+        sub.port.postMessage({ type: 'event', entry });
+      } catch {}
+    }
+  } catch {}
+}
+chrome.runtime.onConnect.addListener((port)=>{
+  if (port.name !== 'live-log') return;
+  const sub = { port, scope: 'global', tabId: null, size: 25 };
+  LIVE_SUBS.add(sub);
+  try { port.postMessage({ type: 'snapshot', logs: snapshotRecent(sub.size, sub.scope, sub.tabId) }); } catch {}
+  port.onMessage.addListener((msg)=>{
+    try {
+      if (msg && msg.type === 'subscribe') {
+        sub.scope = (msg.scope === 'tab') ? 'tab' : 'global';
+        sub.tabId = (typeof msg.tabId === 'number') ? msg.tabId : null;
+        sub.size = [25,50,100].includes(msg.size) ? msg.size : 25;
+        port.postMessage({ type: 'snapshot', logs: snapshotRecent(sub.size, sub.scope, sub.tabId) });
+      }
+    } catch {}
+  });
+  port.onDisconnect.addListener(()=>{ try { LIVE_SUBS.delete(sub); } catch {} });
+});
+
+// Register once: DNR rule matched events (feedback)
+try {
+  if (chrome.declarativeNetRequest && chrome.declarativeNetRequest.onRuleMatchedDebug) {
+    chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(async (info) => {
+      try {
+        const cfg = await getConfig();
+        if (!cfg.enabled) return; // ignore when protection is OFF
+        const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
+        const nextCount = (threats_countered || 0) + 1;
+        await chrome.storage.local.set({ threats_countered: nextCount });
+        await updateBadge();
+        // Build an event entry for logs/recent
+        const entry = {
+          ts: Date.now(),
+          type: 'dnr',
+          action: (info && info.rule && info.rule.action && info.rule.action.type) ? String(info.rule.action.type) : 'block',
+          url: info && info.request ? String(info.request.url||'') : '',
+          initiator: info && info.request && info.request.initiator ? String(info.request.initiator) : '',
+          ruleId: info && info.rule ? String(info.rule.id) : 'rule'
+        };
+        if (typeof info.tabId === 'number') entry.tabId = info.tabId;
+        if (cfg.auditMode) {
+          // Tag entry to reflect audit mode; do not block/alter
+          entry.ruleId = String(entry.ruleId || 'rule') + ' (audit)';
+          entry.action = 'audit';
+          const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
+          const next = threat_logs.concat(entry).slice(-100); // keep last 100
+          await chrome.storage.local.set({ threat_logs: next });
+          // Keep recent buffer for live snapshots
+          await pushRecent(entry);
+        } else {
+          await pushRecent(entry);
+        }
+        // Per-tab increment (if enabled)
+        if (typeof info.tabId === 'number') { await incTabThreat(info.tabId); }
+        // Broadcast to live subscribers
+        try { broadcastLiveEvent(entry); } catch {}
+      } catch (e) {
+        // ignore
+      }
+    });
+  }
+} catch {}
+
+// Build and sync DNR dynamic allow rules from whitelist and whitelistPaths
+function escapeRegex(str){ return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Heuristic base-domain extractor (PSL-lite). For ccTLDs, treat common SLDs as part of suffix.
+function getBaseDomain(hostname){
+  try {
+    const parts = String(hostname||'').toLowerCase().split('.').filter(Boolean);
+    if (parts.length <= 2) return parts.join('.');
+    const tld = parts[parts.length-1];
+    const sld = parts[parts.length-2];
+    const commonCcSlds = new Set(['co','com','net','org','gov','ac','edu']);
+    if (tld.length === 2 && commonCcSlds.has(sld) && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
+  } catch { return String(hostname||''); }
+}
+function normalizeOriginToBase(origin){
+  try {
+    const u = new URL(origin);
+    const base = getBaseDomain(u.hostname);
+    return `${u.protocol}//${base}`;
+  } catch { return String(origin||''); }
+}
+
+// Build and sync DNR dynamic block rules from blacklist and blacklistPaths
+function buildBlockRulesFromConfig(cfg){
+  const rules = [];
+  let idBase = 910000; // distinct reserved range from allow rules
+  const addRule = (rule) => { rule.id = idBase++; rule.priority = 2000; rules.push(rule); };
+  // Origin-based block (base domain + any subdomain)
+  for (const origin of (cfg.blacklist||[])){
+    try {
+      const u = new URL(origin);
+      const base = getBaseDomain(u.hostname);
+      const host = escapeRegex(base);
+      const rx = `^https?:\\/\\/([^/]+\\.)*${host}(?:[:/].*)?$`;
+      addRule({ action: { type: 'block' }, condition: { regexFilter: rx } });
+    } catch {}
+  }
+  // Path-based block (exact host; no subdomain widening). Matches exact path or subpaths.
+  for (const pathKey of (cfg.blacklistPaths||[])){
+    try {
+      const key = normalizePathKey(pathKey);
+      const u = new URL(key);
+      const host = escapeRegex(u.hostname);
+      const pathEsc = escapeRegex(u.pathname);
+      const suffix = `(?:/(?:[^?#]*)?)?(?:[?#].*)?$`;
+      const rx = `^https?:\\/\\/${host}${pathEsc}${suffix}`;
+      addRule({ action: { type: 'block' }, condition: { regexFilter: rx } });
+    } catch {}
+  }
+  return rules;
+}
+async function syncDnrBlacklist(cfg){
+  try {
+    if (!chrome.declarativeNetRequest?.updateDynamicRules) return;
+    const rules = buildBlockRulesFromConfig(cfg);
+    const { dnr_block_rule_ids = [] } = await chrome.storage.local.get('dnr_block_rule_ids');
+    const removeRuleIds = Array.isArray(dnr_block_rule_ids) ? dnr_block_rule_ids : [];
+    const addRules = rules;
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
+    await chrome.storage.local.set({ dnr_block_rule_ids: addRules.map(r=>r.id) });
+  } catch {}
+}
+function hostFromOrigin(origin){ try { return new URL(origin).hostname; } catch { return ''; } }
+function normalizePathKey(input){
+  try {
+    const u = new URL(input);
+    return u.origin + u.pathname; // strip query/fragment
+  } catch {
+    return String(input||'').split('?')[0].split('#')[0];
+  }
+}
+function buildAllowRulesFromConfig(cfg){
+  const rules = [];
+  let idBase = 900000; // our reserved ID range
+  const addRule = (rule) => { rule.id = idBase++; if (typeof rule.priority !== 'number') rule.priority = 1000; rules.push(rule); };
+  // Origin-based allow: allow entire origin when in cfg.whitelist
+  for (const origin of (cfg.whitelist||[])){
+    try {
+      const u = new URL(origin);
+      const base = getBaseDomain(u.hostname);
+      const host = escapeRegex(base);
+      // Match any subdomain depth of the base host
+      const rx = `^https?:\\/\\/([^/]+\\.)*${host}(?:[:/].*)?$`;
+      // URL-allow for the whitelisted site itself
+      addRule({ action: { type: 'allow' }, condition: { regexFilter: rx }, priority: 1000 });
+    } catch {}
+  }
+  // Exact-host initiator allow: full immunity for requests initiated by these hosts
+  for (const host of (cfg.whitelistExactHosts||[])){
+    try {
+      const h = String(host||'').trim().toLowerCase();
+      if (!h) continue;
+      addRule({ action: { type: 'allowAllRequests' }, condition: { initiatorDomains: [h] }, priority: 1500 });
+    } catch {}
+  }
+  // Path-based allow (exact host; no subdomain widening). Matches exact path or subpaths.
+  for (const pathKey of (cfg.whitelistPaths||[])){
+    try {
+      const key = normalizePathKey(pathKey);
+      const u = new URL(key);
+      const host = escapeRegex(u.hostname);
+      const pathEsc = escapeRegex(u.pathname);
+      // Always match exact path or any subpath that follows
+      // Examples:
+      //  - key '/api/core/v5/events' matches '/api/core/v5/events' and '/api/core/v5/events/...'
+      //  - key '/api/core/v5/events/' matches likewise
+      const suffix = `(?:/(?:[^?#]*)?)?(?:[?#].*)?$`;
+      const rx = `^https?:\\/\\/${host}${pathEsc}${suffix}`;
+      addRule({ action: { type: 'allow' }, condition: { regexFilter: rx }, priority: 1000 });
+    } catch {}
+  }
+  return rules;
+}
+async function syncDnrAllowlist(cfg){
+  try {
+    if (!chrome.declarativeNetRequest?.updateDynamicRules) return;
+    const rules = buildAllowRulesFromConfig(cfg);
+    const { dnr_allow_rule_ids = [] } = await chrome.storage.local.get('dnr_allow_rule_ids');
+    const removeRuleIds = Array.isArray(dnr_allow_rule_ids) ? dnr_allow_rule_ids : [];
+    const addRules = rules;
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
+    await chrome.storage.local.set({ dnr_allow_rule_ids: addRules.map(r=>r.id) });
+  } catch {}
+}
+
+// Badge helper: show threats counter on the extension icon
+async function updateBadge() {
+  try {
+    const cfg = await getConfig();
+    if (!cfg.enabled) {
+      await chrome.action.setBadgeText({ text: '' });
+      return;
+    }
+    const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
+    const text = threats_countered > 0 ? (threats_countered > 9999 ? '9K+' : String(threats_countered)) : '';
+    await chrome.action.setBadgeBackgroundColor({ color: '#d23f31' });
+    await chrome.action.setBadgeText({ text });
+  } catch {}
+}
 
 function normalizeMode(m){
   const s = String(m||'').toLowerCase();
@@ -70,6 +330,7 @@ async function getConfig() {
   // Ensure booleans exist
   if (typeof cfg.enabled !== 'boolean') { cfg.enabled = true; changed = true; }
   if (typeof cfg.auditMode !== 'boolean') { cfg.auditMode = false; changed = true; }
+  if (typeof cfg.statsPerTab !== 'boolean') { cfg.statsPerTab = false; changed = true; }
   // Remove legacy fields
   if ('ytMode' in cfg) { delete cfg.ytMode; changed = true; }
   // Ensure modules object exists with defaults where missing
@@ -77,7 +338,11 @@ async function getConfig() {
   if (JSON.stringify(mods) !== JSON.stringify(cfg.modules||{})) { cfg.modules = mods; changed = true; }
   // Ensure whitelist array exists
   if (!Array.isArray(cfg.whitelist)) { cfg.whitelist = []; changed = true; }
+  if (!Array.isArray(cfg.whitelistExactHosts)) { cfg.whitelistExactHosts = []; changed = true; }
   if (!Array.isArray(cfg.whitelistPaths)) { cfg.whitelistPaths = []; changed = true; }
+  // Ensure blacklist arrays exist
+  if (!Array.isArray(cfg.blacklist)) { cfg.blacklist = []; changed = true; }
+  if (!Array.isArray(cfg.blacklistPaths)) { cfg.blacklistPaths = []; changed = true; }
   if (changed) {
     await chrome.storage.local.set({ config: cfg });
   }
@@ -103,6 +368,8 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (typeof threats_countered !== 'number') {
     await chrome.storage.local.set({ threats_countered: 0 });
   }
+  // Initialize per-tab threats map
+  try { const { tab_threats } = await chrome.storage.local.get('tab_threats'); if (!tab_threats || typeof tab_threats !== 'object') { await chrome.storage.local.set({ tab_threats: {} }); } } catch {}
   const { threat_logs } = await chrome.storage.local.get('threat_logs');
   if (!Array.isArray(threat_logs)) {
     await chrome.storage.local.set({ threat_logs: [] });
@@ -115,7 +382,13 @@ chrome.runtime.onInstalled.addListener(async () => {
       if (shouldDisable) await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: ['rules_analytics'] });
       else await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: ['rules_analytics'] });
     }
+    // Sync allowlist overrides
+    await syncDnrAllowlist(cfg);
+    // Sync blacklist overrides
+    await syncDnrBlacklist(cfg);
   } catch {}
+  // Initialize badge state
+  try { await updateBadge(); } catch {}
 });
 
 // Also enforce ruleset state on browser startup
@@ -129,6 +402,15 @@ try {
         else await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: ['rules_analytics'] });
       }
     } catch {}
+    try { await syncDnrAllowlist(await getConfig()); } catch {}
+    try { await syncDnrBlacklist(await getConfig()); } catch {}
+    // Reset threats counter on every browser startup; preserve configs/whitelists
+    try {
+      await chrome.storage.local.set({ threats_countered: 0 });
+      await clearRecent();
+      await setTabThreats({});
+    } catch {}
+    try { await updateBadge(); } catch {}
   });
 } catch {}
 
@@ -156,9 +438,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Preserve denyHosts and whitelist unless explicitly provided
       if (!Array.isArray((message.config||{}).denyHosts)) next.denyHosts = current.denyHosts;
       if (!Array.isArray((message.config||{}).whitelist)) next.whitelist = current.whitelist;
+      if (!Array.isArray((message.config||{}).whitelistExactHosts)) next.whitelistExactHosts = current.whitelistExactHosts;
       if (!Array.isArray((message.config||{}).whitelistPaths)) next.whitelistPaths = current.whitelistPaths;
+      if (!Array.isArray((message.config||{}).blacklist)) next.blacklist = current.blacklist;
+      if (!Array.isArray((message.config||{}).blacklistPaths)) next.blacklistPaths = current.blacklistPaths;
       // Persist new config
       await chrome.storage.local.set({ config: next });
+      // If enabled state toggled, reset threats counter and recent events (keep logs)
+      try {
+        if (current.enabled !== next.enabled) {
+          await chrome.storage.local.set({ threats_countered: 0 });
+          await clearRecent();
+        }
+      } catch {}
       // Toggle DNR ruleset based on enabled/audit state to ensure proper behavior
       try {
         if (chrome.declarativeNetRequest?.updateEnabledRulesets) {
@@ -167,6 +459,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           else await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: ['rules_analytics'] });
         }
       } catch {}
+      // Sync DNR allowlist overrides for updated whitelist
+      try { await syncDnrAllowlist(next); } catch {}
+      // Sync DNR blacklist overrides
+      try { await syncDnrBlacklist(next); } catch {}
+      try { await updateBadge(); } catch {}
       sendResponse({ ok: true, config: next });
       return;
     }
@@ -175,26 +472,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true, whitelist: cfg.whitelist || [] });
       return;
     }
+    if (message?.type === 'GET_BLACKLIST') {
+      const cfg = await getConfig();
+      sendResponse({ ok: true, blacklist: cfg.blacklist || [] });
+      return;
+    }
     if (message?.type === 'GET_WHITELIST_PATHS') {
       const cfg = await getConfig();
       sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths || [] });
       return;
     }
+    if (message?.type === 'GET_BLACKLIST_PATHS') {
+      const cfg = await getConfig();
+      sendResponse({ ok: true, blacklistPaths: cfg.blacklistPaths || [] });
+      return;
+    }
     if (message?.type === 'ADD_TO_WHITELIST') {
-      const origin = String(message.origin||'').trim();
+      const origin = String(message.origin||'').trim(); // expected "https://host"
       try {
         if (!origin) { sendResponse({ ok:false, error:'no_origin' }); return; }
         const cfg = await getConfig();
         const set = new Set(cfg.whitelist||[]);
-        set.add(origin);
+        const norm = normalizeOriginToBase(origin);
+        set.add(norm);
         cfg.whitelist = Array.from(set).sort();
+        // Track exact host for initiator-based allow
+        const host = hostFromOrigin(origin);
+        const hexact = new Set(cfg.whitelistExactHosts||[]);
+        if (host) { hexact.add(host.toLowerCase()); }
+        cfg.whitelistExactHosts = Array.from(hexact).sort();
         await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrAllowlist(cfg); } catch {}
         sendResponse({ ok: true, whitelist: cfg.whitelist });
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
+    if (message?.type === 'ADD_TO_BLACKLIST') {
+      const origin = String(message.origin||'').trim();
+      try {
+        if (!origin) { sendResponse({ ok:false, error:'no_origin' }); return; }
+        const cfg = await getConfig();
+        const set = new Set(cfg.blacklist||[]);
+        const norm = normalizeOriginToBase(origin);
+        set.add(norm);
+        cfg.blacklist = Array.from(set).sort();
+        await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrBlacklist(cfg); } catch {}
+        sendResponse({ ok: true, blacklist: cfg.blacklist });
+      } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
+      return;
+    }
     if (message?.type === 'ADD_TO_WHITELIST_PATHS') {
-      const path = String(message.path||'').trim(); // expected format: origin + pathname
+      const path = normalizePathKey(String(message.path||'').trim());
       try {
         if (!path) { sendResponse({ ok:false, error:'no_path' }); return; }
         const cfg = await getConfig();
@@ -202,7 +531,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         set.add(path);
         cfg.whitelistPaths = Array.from(set).sort();
         await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrAllowlist(cfg); } catch {}
         sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths });
+      } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
+      return;
+    }
+    if (message?.type === 'ADD_TO_BLACKLIST_PATHS') {
+      const path = normalizePathKey(String(message.path||'').trim());
+      try {
+        if (!path) { sendResponse({ ok:false, error:'no_path' }); return; }
+        const cfg = await getConfig();
+        const set = new Set(cfg.blacklistPaths||[]);
+        set.add(path);
+        cfg.blacklistPaths = Array.from(set).sort();
+        await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrBlacklist(cfg); } catch {}
+        sendResponse({ ok: true, blacklistPaths: cfg.blacklistPaths });
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
@@ -211,18 +555,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const cfg = await getConfig();
         cfg.whitelist = (cfg.whitelist||[]).filter(o => o !== origin);
+        // Remove exact host as well
+        const host = hostFromOrigin(origin);
+        if (host) {
+          cfg.whitelistExactHosts = (cfg.whitelistExactHosts||[]).filter(h => h !== host.toLowerCase());
+        }
         await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrAllowlist(cfg); } catch {}
         sendResponse({ ok: true, whitelist: cfg.whitelist });
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
+    if (message?.type === 'REMOVE_FROM_BLACKLIST') {
+      const origin = String(message.origin||'').trim();
+      try {
+        const cfg = await getConfig();
+        cfg.blacklist = (cfg.blacklist||[]).filter(o => o !== origin);
+        await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrBlacklist(cfg); } catch {}
+        sendResponse({ ok: true, blacklist: cfg.blacklist });
+      } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
+      return;
+    }
     if (message?.type === 'REMOVE_FROM_WHITELIST_PATHS') {
-      const path = String(message.path||'').trim();
+      const path = normalizePathKey(String(message.path||'').trim());
       try {
         const cfg = await getConfig();
         cfg.whitelistPaths = (cfg.whitelistPaths||[]).filter(p => p !== path);
         await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrAllowlist(cfg); } catch {}
         sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths });
+      } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
+      return;
+    }
+    if (message?.type === 'REMOVE_FROM_BLACKLIST_PATHS') {
+      const path = normalizePathKey(String(message.path||'').trim());
+      try {
+        const cfg = await getConfig();
+        cfg.blacklistPaths = (cfg.blacklistPaths||[]).filter(p => p !== path);
+        await chrome.storage.local.set({ config: cfg });
+        try { await syncDnrBlacklist(cfg); } catch {}
+        sendResponse({ ok: true, blacklistPaths: cfg.blacklistPaths });
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
@@ -230,7 +603,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const cfg = await getConfig();
       if (!cfg.enabled) { sendResponse({ ok: true, threats: 0 }); return; }
       const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
-      sendResponse({ ok: true, threats: threats_countered });
+      let perTab = null;
+      try {
+        if (cfg.statsPerTab && typeof message.tabId === 'number') {
+          const m = await getTabThreats();
+          perTab = m[message.tabId] || 0;
+        }
+      } catch {}
+      sendResponse({ ok: true, threats: threats_countered, perTab });
       return;
     }
     if (message?.type === 'GET_LOGS') {
@@ -248,88 +628,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === 'GET_RECENT') {
       const cfg = await getConfig();
       if (!cfg.enabled) { sendResponse({ ok: true, logs: [] }); return; }
-      // Return in-memory recent events (max 5), newest last
-      sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-5) });
+      // Return persisted recent events if available; fallback to in-memory
+      try {
+        const { recent_events = [] } = await chrome.storage.local.get(RECENT_KEY);
+        sendResponse({ ok: true, logs: (Array.isArray(recent_events) ? recent_events : []).slice(-5) });
+      } catch {
+        sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-5) });
+      }
       return;
     }
     if (message?.type === 'POISONED_EVENT') {
       // Count and store a concise log of page-world poisoning events (no personal data)
       const cfg = await getConfig();
       if (!cfg.enabled) { sendResponse({ ok: true }); return; }
-      const { threats_countered = 0, threat_logs = [] } = await chrome.storage.local.get(['threats_countered','threat_logs']);
+      const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
+      const nextCount = (threats_countered || 0) + 1;
+      await chrome.storage.local.set({ threats_countered: nextCount });
+      await updateBadge();
       const ev = message.event || {};
       const entry = {
-        time: Date.now(),
-        request: { url: ev.url || '', method: ev.method || 'beacon', initiator: ev.initiator || (sender?.url || '') },
-        // In audit mode, annotate rule to reflect diagnostic nature
-        ruleId: 'poison',
-        action: ev.action || 'modify',
-        preview: (typeof ev.preview === 'string' ? ev.preview : '')
+        ts: Date.now(),
+        type: 'poison',
+        action: ev.action || 'poison',
+        url: ev.url || '',
+        initiator: ev.initiator || (sender && sender.url) || '',
+        ruleId: ev.ruleId ? String(ev.ruleId) : 'poison'
       };
-      // Always increment counter
-      await chrome.storage.local.set({ threats_countered: threats_countered + 1 });
-      // If currently auditing, tag ruleId to signal diagnostic mode in UI
-      if (cfg.auditMode) {
-        entry.ruleId = (ev.ruleId ? String(ev.ruleId) : 'poison') + ' (audit)';
-        entry.action = ev.action ? String(ev.action) : 'audit';
-      }
+      try { const tabId = sender?.tab?.id; if (typeof tabId === 'number') entry.tabId = tabId; } catch {}
+      const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
       if (cfg.auditMode) {
         const next = threat_logs.concat(entry).slice(-100);
         await chrome.storage.local.set({ threat_logs: next });
-      } else {
-        // Keep only in-memory last 5 when not auditing
-        RECENT_EVENTS = RECENT_EVENTS.concat(entry).slice(-5);
       }
+      await pushRecent(entry);
+      // Per-tab increment (if enabled)
+      try { const tabId = sender?.tab?.id; if (typeof tabId === 'number') { await incTabThreat(tabId); } } catch {}
+      // Broadcast to live subscribers
+      try { broadcastLiveEvent(entry); } catch {}
       sendResponse({ ok: true });
       return;
     }
-    if (message?.type === 'RESET_STATS') {
-      const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
-      await chrome.storage.local.set({ threats_countered: 0, threat_logs: [] });
-      RECENT_EVENTS = [];
-      sendResponse({ ok: true, logs: threat_logs });
-      return;
-    }
+    
     sendResponse({ ok: false });
   })();
   return true; // async
 });
 
-// Increment threats counter when DNR rules match (requires declarativeNetRequestFeedback permission)
+// Clean up per-tab counter when a tab is closed
 try {
-  if (chrome.declarativeNetRequest && chrome.declarativeNetRequest.onRuleMatchedDebug) {
-    chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(async (info) => {
-      try {
-        const cfg = await getConfig();
-        if (!cfg.enabled) return; // ignore when protection is OFF
-        const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
-        // compose a compact log entry
-        const entry = {
-          time: Date.now(),
-          request: {
-            url: info.request?.url || '',
-            method: info.request?.method || '',
-            initiator: info.request?.initiator || ''
-          },
-          ruleId: info.rule?.id || info.ruleId || null,
-          action: info.rule?.action?.type || info.action?.type || ''
-        };
-        await chrome.storage.local.set({ threats_countered: threats_countered + 1 });
-        if (cfg.auditMode) {
-          // Tag entry to reflect audit mode; do not block/alter
-          entry.ruleId = String(entry.ruleId || 'rule') + ' (audit)';
-          entry.action = 'audit';
-          const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
-          const next = threat_logs.concat(entry).slice(-100); // keep last 100
-          await chrome.storage.local.set({ threat_logs: next });
-        } else {
-          RECENT_EVENTS = RECENT_EVENTS.concat(entry).slice(-5);
-        }
-      } catch (e) {
-        // ignore
-      }
-    });
+  if (chrome.tabs && chrome.tabs.onRemoved) {
+    chrome.tabs.onRemoved.addListener(async (tabId) => { try { await clearTabThreat(tabId); } catch {} });
   }
-} catch (e) {
-  // ignore
-}
+} catch {}

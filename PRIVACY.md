@@ -42,6 +42,9 @@ Privateness is “the quality of being private.” This browser extension protec
 ## 8) Security
 
 - Minimized permissions, validated inputs, local‑only processing.
+- RCE-resistance: no dynamic code execution (no `eval`, no `new Function`, no string-based timers).
+- DOM safety: user-controlled data is written with `textContent` (no `innerHTML` for untrusted data).
+- Content Security Policy (extension pages): `script-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'`.
 
 ## 9) Contact
 

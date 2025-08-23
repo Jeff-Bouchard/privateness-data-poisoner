@@ -28,11 +28,13 @@
     if (['strict','maximum','max','active_warfare','warfare'].includes(s)) return 'strict';
     return 'moderate';
   }
-  const MODE = normalizeMode(CFG.mode);
-  const ENABLED = (CFG.enabled !== false);
-  const AUDIT = !!CFG.auditMode;
-  const WHITELIST = Array.isArray(CFG.whitelist) ? CFG.whitelist : [];
-  const WHITELIST_PATHS = Array.isArray(CFG.whitelistPaths) ? CFG.whitelistPaths : [];
+  let MODE = normalizeMode(CFG.mode);
+  let ENABLED = (CFG.enabled !== false);
+  let AUDIT = !!CFG.auditMode;
+  let WHITELIST = Array.isArray(CFG.whitelist) ? CFG.whitelist : [];
+  let WHITELIST_PATHS = Array.isArray(CFG.whitelistPaths) ? CFG.whitelistPaths : [];
+  let BLACKLIST = Array.isArray(CFG.blacklist) ? CFG.blacklist : [];
+  let BLACKLIST_PATHS = Array.isArray(CFG.blacklistPaths) ? CFG.blacklistPaths : [];
   // Custom defunct names from config (for brand/company/org replacement)
   let DEFUNCT_CUSTOM = [];
   try { const arr = CFG?.modules?.poisonConfig?.defunctNames; if (Array.isArray(arr)) DEFUNCT_CUSTOM = arr.filter(x=>typeof x==='string' && x.trim()).map(x=>x.trim()); } catch {}
@@ -47,27 +49,108 @@
     'px.ads.linkedin.com','analytics.tiktok.com','business-api.tiktok.com','connect.facebook.net'
   ]));
 
+  function normalizePathKey(input){
+    try { const u = new URL(input, location.href); return u.origin + u.pathname; } catch { return String(input||'').split('?')[0].split('#')[0]; }
+  }
+  function getBaseDomain(hostname){
+    try {
+      const parts = String(hostname||'').toLowerCase().split('.').filter(Boolean);
+      if (parts.length <= 2) return parts.join('.');
+      const tld = parts[parts.length-1];
+      const sld = parts[parts.length-2];
+      const commonCcSlds = new Set(['co','com','net','org','gov','ac','edu']);
+      if (tld.length === 2 && commonCcSlds.has(sld) && parts.length >= 3) {
+        return parts.slice(-3).join('.');
+      }
+      return parts.slice(-2).join('.');
+    } catch { return String(hostname||''); }
+  }
+  function sameBase(hostA, hostB){
+    return getBaseDomain(hostA) === getBaseDomain(hostB);
+  }
+  function isBlacklisted(url){
+    try {
+      const u = new URL(url, location.href);
+      // Origin-level: match by base domain
+      for (const entry of BLACKLIST){
+        try { const e = new URL(entry, location.href); if (sameBase(u.hostname, e.hostname)) return true; } catch {}
+      }
+      const reqKey = normalizePathKey(u.toString());
+      for (const entry of BLACKLIST_PATHS){
+        try {
+          const e = new URL(normalizePathKey(entry), location.href);
+          // Path rules: require exact host match (no subdomain widening)
+          if (u.hostname !== e.hostname) continue;
+          const key = e.origin + e.pathname;
+          // Normalize trailing slash semantics for exact path and subpaths
+          const reqDir = reqKey.endsWith('/') ? reqKey : (reqKey + '/');
+          const keyDir = key.endsWith('/') ? key : (key + '/');
+          // Exact path match should succeed regardless of trailing slash
+          if (reqKey === key || (reqKey + '/') === keyDir || (key + '/') === reqDir) return true;
+          // Subpath match
+          if (reqDir.startsWith(keyDir)) return true;
+        } catch {}
+      }
+      return false;
+    } catch { return false; }
+  }
   function isWhitelisted(url){
     try {
-      const pageOrigin = location.origin;
-      if (WHITELIST.includes(pageOrigin)) return true;
       const u = new URL(url, location.href);
-      if (WHITELIST.includes(u.origin)) return true;
-      const pathKey = u.origin + u.pathname;
-      if (WHITELIST_PATHS.includes(pathKey)) return true;
+      // Origin-level: match by base domain
+      for (const entry of WHITELIST){
+        try { const e = new URL(entry, location.href); if (sameBase(u.hostname, e.hostname)) return true; } catch {}
+      }
+      const reqKey = normalizePathKey(u.toString());
+      for (const entry of WHITELIST_PATHS){
+        try {
+          const e = new URL(normalizePathKey(entry), location.href);
+          // Path rules: require exact host match (no subdomain widening)
+          if (u.hostname !== e.hostname) continue;
+          const key = e.origin + e.pathname;
+          // Normalize trailing slash semantics for exact path and subpaths
+          const reqDir = reqKey.endsWith('/') ? reqKey : (reqKey + '/');
+          const keyDir = key.endsWith('/') ? key : (key + '/');
+          // Exact path match should succeed regardless of trailing slash
+          if (reqKey === key || (reqKey + '/') === keyDir || (key + '/') === reqDir) return true;
+          // Subpath match
+          if (reqDir.startsWith(keyDir)) return true;
+        } catch {}
+      }
       return false;
     } catch { return false; }
   }
 
   function isMatch(url){
     try {
+      // Blacklist wins over whitelist
+      if (isBlacklisted(url)) return true;
       if (isWhitelisted(url)) return false;
       const u = new URL(url, location.href);
-      if (DENY.has(u.host)) return true;
+      // Conservative stability bypass: do not target same-origin application APIs
+      // except when the path clearly indicates telemetry/metrics.
       const p = u.pathname.toLowerCase();
-      if (/collect|analytics|beacon|track|pixel|measure/.test(p)) return true;
-      for (const [k] of u.searchParams) { if (/^(utm_|gclid|fbclid|msclkid|mc_eid)/i.test(k)) return true; }
-      if (MODE === 'strict' && isYouTubeTelemetry(url)) return true;
+      if (u.origin === location.origin && p.startsWith('/api/')){
+        const looksTelemetry = (
+          p.includes('/stats') || p.includes('/stat') ||
+          p.includes('/analytics') || p.includes('/metric') ||
+          p.includes('/beacon') || p.includes('/tracking') ||
+          p.includes('/report') || p.includes('/sentry') ||
+          p.includes('/generate_204') || p.includes('/csi_204')
+        );
+        if (!looksTelemetry) return false;
+      }
+      if (DENY.has(u.host)) return true;
+      // Known telemetry path fragments
+      return (
+        p.includes('/collect') ||
+        p.includes('/g/collect') ||
+        p.includes('/r/collect') ||
+        p.includes('/batch') ||
+        /collect|analytics|beacon|track|pixel|measure/.test(p) ||
+        [...u.searchParams].some(([k]) => /^(utm_|gclid|fbclid|msclkid|mc_eid)/i.test(k)) ||
+        (MODE === 'strict' && isYouTubeTelemetry(url))
+      );
     } catch {}
     return false;
   }
@@ -84,7 +167,113 @@
   const randSigned = () => (rand() - 0.5);
 
   // Internal flag for YT noise: strict mode only
-  const YT_TELEMETRY_NOISE = (MODE === 'strict');
+  let YT_TELEMETRY_NOISE = (MODE === 'strict');
+
+  // Apply new config at runtime (live whitelist updates, etc.)
+  function applyCfg(next){
+    try {
+      if (!next || typeof next !== 'object') return;
+      CFG = { ...CFG, ...next };
+      MODE = normalizeMode(CFG.mode);
+      ENABLED = (CFG.enabled !== false);
+      AUDIT = !!CFG.auditMode;
+      WHITELIST = Array.isArray(CFG.whitelist) ? CFG.whitelist : [];
+      WHITELIST_PATHS = Array.isArray(CFG.whitelistPaths) ? CFG.whitelistPaths : [];
+      BLACKLIST = Array.isArray(CFG.blacklist) ? CFG.blacklist : [];
+      BLACKLIST_PATHS = Array.isArray(CFG.blacklistPaths) ? CFG.blacklistPaths : [];
+      YT_TELEMETRY_NOISE = (MODE === 'strict');
+    } catch {}
+  }
+  try { window.addEventListener('__MAX_POISE_CFG_UPDATE', (ev)=>{ try { applyCfg(ev && ev.detail && ev.detail.cfg); } catch {} }); } catch {}
+
+  // === Schema-aware mutators (non-YouTube) ===
+  function seededRandForHost(host){
+    try { const s = xmur3(String(KEY||'') + '::' + String(host||''))(); return mulberry32(s); } catch { return rand; }
+  }
+  function buildPersona(rfn){
+    const r = rfn || rand;
+    return {
+      locale: 'en-US',
+      tz: 'UTC',
+      platform: r() > 0.5 ? 'Win32' : 'X11',
+      ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+      screen: { width: 1920, height: 1080 }
+    };
+  }
+  function cloneInit(init){ const copy = Object.assign({}, (init||{})); if (init && init.headers) copy.headers = new Headers(init.headers instanceof Headers ? init.headers : init.headers); else copy.headers = new Headers(); return copy; }
+  function applyPersonaToInitHeaders(init, persona){ const ni = cloneInit(init); ni.headers.set('Accept-Language', (persona.locale||'en-US') + ',en;q=0.8'); ['Sec-CH-UA-Platform','Sec-CH-UA-Platform-Version','Sec-CH-UA-Arch','Sec-CH-UA-Model','Sec-CH-UA-Full-Version','Sec-CH-UA-Full-Version-List','Sec-CH-UA-WoW64'].forEach(h=>ni.headers.delete(h)); return ni; }
+  function normalizeRegionParams(u){ try { const p=u.searchParams; ['gl','gr','geo','market','country','region'].forEach(k=>p.has(k)&&p.delete(k)); if (p.has('hl')) p.set('hl','en'); if (p.has('language')) p.set('language','en-US'); if (p.has('timezone')) p.set('timezone','UTC'); } catch {} return u; }
+  function tryMutateBody(init, mutateKV){
+    if (!init) return init;
+    try {
+      if (typeof init.body === 'string' && /(^|[;&])\w+=/.test(init.body)){
+        const usp = new URLSearchParams(init.body); for (const [k,v] of [...usp.entries()]) usp.set(k, mutateKV(k,v));
+        const ni = cloneInit(init); ni.body = usp.toString(); ni.headers.set('content-type','application/x-www-form-urlencoded'); return ni;
+      }
+      const ct = extractContentType(init.headers||'');
+      if (typeof init.body === 'string' && /json/i.test(ct)){
+        try { const o = JSON.parse(init.body); const mutated = mutateObjectSchema(o, mutateKV); const ni = cloneInit(init); ni.body = JSON.stringify(mutated); ni.headers.set('content-type','application/json'); return ni; } catch {}
+      }
+    } catch {}
+    return init;
+  }
+  function mutateObjectSchema(obj, mutateKV){
+    if (Array.isArray(obj)) return obj.map(v => typeof v === 'string' ? mutateKV('', v) : (typeof v === 'object' ? mutateObjectSchema(v, mutateKV) : v));
+    if (obj && typeof obj === 'object'){
+      const out = {}; for (const k of Object.keys(obj)){ const v = obj[k]; out[k] = (typeof v==='string') ? mutateKV(k,v) : (typeof v==='object' ? mutateObjectSchema(v, mutateKV) : v); }
+      return out;
+    }
+    return obj;
+  }
+  function hostOf(urlStr){ try { return new URL(urlStr, location.href).hostname; } catch { return ''; } }
+  function pathOf(urlStr){ try { return new URL(urlStr, location.href).pathname; } catch { return ''; } }
+  function isFacebookHost(h){ return /(^|\.)facebook\.com$|(^|\.)fbcdn\.net$|(^|\.)instagram\.com$/.test(h||''); }
+  function isFBPixelPath(p){ return /\/tr\//.test(p||'') || /\/pixel\//.test(p||'') || /\/events/.test(p||''); }
+  function mutateFB(urlStr, init){
+    try {
+      const u = new URL(urlStr, location.href); normalizeRegionParams(u);
+      const r = seededRandForHost(u.hostname); const persona = buildPersona(r); const p = u.searchParams;
+      const anonID = `fbp.${Math.floor(1000000000000 + r()*8999999999999)}`;
+      p.set('dl', location.origin + '/'); p.set('dr',''); p.set('ua', persona.ua);
+      p.set('fbp', anonID); p.set('fbc',''); if (!p.has('ev')) { p.set('it','0'); p.set('ev','PageView'); }
+      const ni = applyPersonaToInitHeaders(init, persona);
+      return [u.toString(), ni];
+    } catch { return [urlStr, init]; }
+  }
+  function isTikTokHost(h){ return /(^|\.)tiktok\.com$|(^|\.)ttwstatic\.com$/.test(h||''); }
+  function isTikTokPixelPath(p){ return /\/i18n\/pixel\//.test(p||'') || /\/api\/track\//.test(p||''); }
+  function mutateTikTok(urlStr, init){
+    try {
+      const u = new URL(urlStr, location.href); normalizeRegionParams(u);
+      const r = seededRandForHost(u.hostname); const persona = buildPersona(r); const p = u.searchParams;
+      p.set('referer', location.origin + '/'); p.set('user_agent', persona.ua); p.set('timezone', persona.tz);
+      p.set('screen_width', String(persona.screen.width)); p.set('screen_height', String(persona.screen.height)); p.set('language', persona.locale);
+      const ni = applyPersonaToInitHeaders(init, persona);
+      return [u.toString(), ni];
+    } catch { return [urlStr, init]; }
+  }
+  function isGenericAnalyticsHost(h){ return /google-analytics\.com$|mixpanel\.com$|segment\.io$|hotjar\.com$|fullstory\.com$/.test(h||''); }
+  function mutateGeneric(urlStr, init){
+    try {
+      const u = new URL(urlStr, location.href); normalizeRegionParams(u);
+      const r = seededRandForHost(u.hostname); const persona = buildPersona(r); const p = u.searchParams;
+      if (p.has('dl')) p.set('dl', location.origin + '/'); if (p.has('dr')) p.set('dr',''); if (p.has('ul')) p.set('ul', persona.locale);
+      if (p.has('sr')) p.set('sr', `${persona.screen.width}x${persona.screen.height}`);
+      const ni = applyPersonaToInitHeaders(init, persona);
+      return [u.toString(), ni];
+    } catch { return [urlStr, init]; }
+  }
+  const SCHEMAS = [
+    { name: 'facebook_pixel', test: (u)=>{ const h=hostOf(u), p=pathOf(u); return isFacebookHost(h) && isFBPixelPath(p); }, mutate: mutateFB },
+    { name: 'tiktok_pixel', test: (u)=>{ const h=hostOf(u), p=pathOf(u); return isTikTokHost(h) && isTikTokPixelPath(p); }, mutate: mutateTikTok },
+    { name: 'generic_analytics', test: (u)=>{ const h=hostOf(u); return isGenericAnalyticsHost(h); }, mutate: mutateGeneric }
+  ];
+  function applySchemas(urlStr, init){
+    try {
+      for (const s of SCHEMAS){ if (s.test(urlStr)) { return s.mutate(urlStr, init); } }
+    } catch {}
+    return [urlStr, init];
+  }
 
   function isYouTubeDomain(h){
     if (!h) return false;
@@ -129,16 +318,20 @@
       Object.defineProperty(navigator, 'sendBeacon', { configurable: true, writable: true, value: function(url, data){
         try {
           const u = new URL(url, location.href);
-          if (DENY.has(u.host)) { postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'block' }); return true; }
           if (AUDIT && isMatch(u.toString())){
             postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'audit' });
             return origBeacon(url, data);
           }
           if (MODE === 'strict' && shouldPoison(u.toString())){
+            let newUrl = u.toString();
+            let newInit = { body: data, headers: new Headers() };
+            // apply schema URL/header/body mutations
+            [newUrl, newInit] = applySchemas(newUrl, newInit);
+            newInit = tryMutateBody(newInit, (k,v)=>v);
             const ct = '';
-            const poisoned = buildPoison(data, ct);
-            postPoison({ url: u.toString(), method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
-            return origBeacon(u.toString(), poisoned);
+            const poisoned = buildPoison(newInit.body, ct);
+            postPoison({ url: newUrl, method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+            return origBeacon(newUrl, poisoned);
           }
           if (shouldPoison(u.toString())) { postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'suppress' }); return true; }
         } catch {}
@@ -159,16 +352,18 @@
               return origFetch(input, init);
             }
             if (MODE === 'strict' && shouldPoison(url)){
-              const ct = extractContentType(req.headers);
-              let body = undefined;
-              if (init && 'body' in (init||{})) body = init.body; // best-effort
+              let newUrl = url;
+              let newInit = { ...(init||{}), headers: new Headers(req.headers) };
+              // schema URL/header/body mutations first
+              [newUrl, newInit] = applySchemas(newUrl, newInit);
+              newInit = tryMutateBody(newInit, (k,v)=>v);
+              const ct = extractContentType(newInit.headers);
+              let body = newInit && 'body' in (newInit||{}) ? newInit.body : undefined;
               const poisoned = buildPoison(body, ct);
-              const newInit = { ...(init||{}), body: poisoned, headers: new Headers(req.headers) };
-              if (ct && !/json|x-www-form-urlencoded/i.test(ct)) {
-                newInit.headers.set('content-type', 'application/json');
-              }
-              postPoison({ url, method: (req.method||'fetch'), preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
-              return origFetch(url, newInit);
+              newInit.body = poisoned;
+              if (ct && !/json|x-www-form-urlencoded/i.test(ct)) { newInit.headers.set('content-type', 'application/json'); }
+              postPoison({ url: newUrl, method: (req.method||'fetch'), preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+              return origFetch(newUrl, newInit);
             }
             if (shouldPoison(url)){
               // Reduce signal by sending no body
@@ -197,8 +392,13 @@
               return send.call(this, body);
             }
             if (MODE === 'strict' && shouldPoison(url)){
-              const poisoned = buildPoison(body, '');
-              postPoison({ url, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+              let newUrl = url;
+              let newInit = { body, headers: new Headers() };
+              [newUrl, newInit] = applySchemas(newUrl, newInit);
+              newInit = tryMutateBody(newInit, (k,v)=>v);
+              const poisoned = buildPoison(newInit.body, '');
+              postPoison({ url: newUrl, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+              this.__poise_url = newUrl;
               return send.call(this, poisoned);
             }
             if (shouldPoison(url)) { postPoison({ url, method: 'xhr', preview: '', action: 'suppress' }); return send.call(this, undefined); }

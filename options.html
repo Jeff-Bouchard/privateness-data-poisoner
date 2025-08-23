@@ -62,7 +62,8 @@
         }
 
         .container {
-            max-width: 1440px;
+            /* Expand horizontal space when opened as a tab (~90% viewport width) */
+            max-width: min(1920px, 90vw);
             margin: 0 auto;
             padding: 28px
         }
@@ -325,7 +326,7 @@
             border-radius: 10px;
             background: #0f1418;
         }
-        #logsTable { width: 100%; table-layout: fixed; border-collapse: collapse; }
+        #logsTable { width: 100%; table-layout: auto; border-collapse: collapse; }
         #logsTable th, #logsTable td { 
             border-bottom: 1px solid var(--border);
         }
@@ -337,17 +338,20 @@
             box-shadow: 0 2px 0 0 var(--border) inset;
             z-index: 1;
         }
-        /* Column widths */
+        /* Column widths (Path column removed) */
         #logsTable th:nth-child(1), #logsTable td:nth-child(1) { width: 120px; }
-        #logsTable th:nth-child(2), #logsTable td:nth-child(2) { width: 220px; }
-        #logsTable th:nth-child(3), #logsTable td:nth-child(3) {
+        /* URL column — prefer horizontal space; enable horizontal scroll if needed */
+        #logsTable th:nth-child(2), #logsTable td:nth-child(2) {
             width: auto;
-            overflow: hidden;
-            text-overflow: ellipsis;
             white-space: nowrap;
+            overflow: visible;
+            text-overflow: clip;
+            min-width: 800px; /* forces table to grow; wrapper will scroll horizontally */
         }
-        #logsTable th:nth-child(4), #logsTable td:nth-child(4) { width: 180px; }
-        #logsTable th:nth-child(5), #logsTable td:nth-child(5) { width: 120px; }
+        /* Rule */
+        #logsTable th:nth-child(3), #logsTable td:nth-child(3) { width: 180px; }
+        /* Actions */
+        #logsTable th:nth-child(4), #logsTable td:nth-child(4) { width: 140px; }
         #logsTable tbody tr:hover { 
             background: rgba(255,255,255,.02);
         }
@@ -412,10 +416,12 @@
             <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                 <div class="small" style="flex:1 1 auto">
                     Blocked/poisoned: <strong id="threats">0</strong>
+                    <span class="small" id="threatsScopeLabel" style="margin-left:8px;color:var(--muted)"></span>
                 </div>
+                <button id="threatScope" class="secondary" title="Toggle threats scope (Global / This tab)" style="padding:6px 10px">Scope: Global</button>
                 <button id="resetThreats" class="secondary" title="Reset counter and erase logs (threat traces)" style="padding:6px 10px">Reset</button>
-                <button id="fullLog" title="Open full log" style="padding:6px 10px">Full log</button>
-                <button id="seeAsTab" class="secondary" title="Open full log as tab" style="padding:6px 10px">See as tab</button>
+                <button id="fullLog" title="Open persisted audit log" style="padding:6px 10px">Full audit log</button>
+                <button id="seeAsTab" class="secondary" title="Open Live log in a new tab" style="padding:6px 10px">Live log (tab)</button>
             </div>
             <div class="small hint">Reset sets the counter back to 0 and clears persisted logs and recent in-memory events.</div>
             <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
@@ -424,7 +430,6 @@
                     <thead>
                         <tr style="text-align:left;color:var(--muted);font-size:12px">
                             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Time</th>
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Path</th>
                             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
                             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
                             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Actions</th>
@@ -450,11 +455,25 @@
             </div>
         </fieldset>
 
-        
+        <!-- Blacklist -->
+        <fieldset class="card">
+            <legend>Blacklist</legend>
+            <div class="small">Blocked origins override whitelist and will always be protected. Click Remove to revoke.</div>
+            <div id="blEmpty" class="small" style="color:var(--muted);margin-top:6px">No blacklisted sites.</div>
+            <div id="blWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="blList" style="margin:0"></ul>
+            </div>
+            <div class="small" style="margin-top:12px;color:var(--muted)">Blacklisted paths (exact match on origin + pathname; subpaths included):</div>
+            <div id="blPathsEmpty" class="small" style="color:var(--muted);margin-top:6px;display:none">No blacklisted paths.</div>
+            <div id="blPathsWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="blPathsList" style="margin:0"></ul>
+            </div>
+        </fieldset>
 
         
 
-        <div class="row">
+        
+<div class="row">
             <button id="save" class="primary">Save</button>
             <span id="status" class="small"></span>
         </div>
@@ -479,7 +498,41 @@
       </div>
     </div>
 
-        
+    <!-- Whitelist Choice Modal -->
+    <div id="wlModal" class="modal" aria-hidden="true" role="dialog">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Add to whitelist</strong>
+          <div id="wlMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
+          <button id="wlClose" style="margin-left:10px">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:10px;color:var(--muted)">Choose the scope to bypass protection for this request:</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button id="wlDomain" class="secondary">Whitelist domain</button>
+            <button id="wlPath" class="secondary">Whitelist path (/…)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Blacklist Choice Modal -->
+    <div id="blModal" class="modal" aria-hidden="true" role="dialog">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Add to blacklist</strong>
+          <div id="blMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
+          <button id="blClose" style="margin-left:10px">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:10px;color:var(--muted)">Choose the scope to force protection for this request:</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button id="blDomain" class="secondary">Blacklist domain</button>
+            <button id="blPath" class="secondary">Blacklist path (/…)</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
         <fieldset class="card">
             <legend>Poisoning options (Strict mode)</legend>

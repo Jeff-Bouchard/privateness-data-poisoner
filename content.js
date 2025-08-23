@@ -19,6 +19,64 @@
     // Protection OFF: do not inject, sanitize, or relay anything.
     return;
   }
+
+  // Helpers to mirror whitelist semantics from injector: 
+  // - Domain entries apply to base domain + subdomains
+  // - Path entries require exact host and prefix match on pathname
+  function getBaseDomain(host){
+    try {
+      const parts = String(host||'').toLowerCase().split('.').filter(Boolean);
+      if (parts.length <= 2) return parts.join('.');
+      const sld = new Set(['co','com','org','net','gov','edu','ac']);
+      if (parts.length >= 3 && sld.has(parts[parts.length-2])) return parts.slice(-3).join('.');
+      return parts.slice(-2).join('.');
+    } catch { return String(host||''); }
+  }
+  function isWhitelistedOrigin(urlStr){
+    try {
+      const u = new URL(urlStr);
+      const base = getBaseDomain(u.hostname);
+      const list = Array.isArray(cfg.whitelist) ? cfg.whitelist : [];
+      for (const origin of list){
+        try {
+          const o = new URL(origin);
+          if (getBaseDomain(o.hostname) === base) return true;
+        } catch {}
+      }
+    } catch {}
+    return false;
+  }
+  function isWhitelistedPath(urlStr){
+    try {
+      const u = new URL(urlStr);
+      const list = Array.isArray(cfg.whitelistPaths) ? cfg.whitelistPaths : [];
+      for (const key of list){
+        try {
+          const k = new URL(key);
+          if (k.hostname !== u.hostname) continue; // exact host only
+          // Normalize trailing slash semantics for exact path and subpaths
+          const reqPath = u.pathname || '/';
+          const keyPath = k.pathname || '/';
+          const reqDir = reqPath.endsWith('/') ? reqPath : (reqPath + '/');
+          const keyDir = keyPath.endsWith('/') ? keyPath : (keyPath + '/');
+          // Exact path match should succeed regardless of trailing slash
+          if (reqPath === keyPath || (reqPath + '/') === keyDir || (keyPath + '/') === reqDir) return true;
+          // Subpath match
+          if (reqDir.startsWith(keyDir)) return true;
+        } catch {}
+      }
+    } catch {}
+    return false;
+  }
+  function pageIsWhitelisted(){
+    const href = location.href;
+    return isWhitelistedOrigin(href) || isWhitelistedPath(href);
+  }
+
+  // If current page is whitelisted, act as fully disabled
+  if (pageIsWhitelisted()) {
+    return;
+  }
   const perOriginKey = okKey ? key : '0'.repeat(64);
 
   // Inject CSP-safe DOM data bridge with config + key, then injector.js
@@ -107,6 +165,18 @@
       try {
         const detail = ev && ev.detail ? ev.detail : {};
         chrome.runtime.sendMessage({ type: 'POISONED_EVENT', event: detail });
+      } catch {}
+    });
+  } catch {}
+
+  // Live config propagation to page world: when config changes in storage, broadcast into page
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      try {
+        if (area === 'local' && changes && changes.config && changes.config.newValue) {
+          const nextCfg = changes.config.newValue;
+          window.dispatchEvent(new CustomEvent('__MAX_POISE_CFG_UPDATE', { detail: { cfg: nextCfg } }));
+        }
       } catch {}
     });
   } catch {}
