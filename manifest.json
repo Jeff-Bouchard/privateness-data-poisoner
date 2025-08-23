@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Privateness.network — Data Protection",
-  "version": "0.2.3",
+  "version": "2.4",
   "description": "Manifest V3 extension that mitigate telemetry and fingerprinting attack surfaces by blocking or data poisoning",
   "action": {
     "default_title": "Privateness — Data Protection",
