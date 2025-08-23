@@ -1,117 +1,349 @@
 <!doctype html>
 <html>
+
 <head>
-  <meta charset="utf-8">
-  <title>Privateness.network — Data Protection (Options)</title>
-  <style>
-    :root{
-      color-scheme: dark;
-      --bg:#0b0f12; --panel:#12171b; --muted:#7b8693; --text:#e6ebf1; --accent:#4ea1ff; --accent-2:#2a6fd6; --border:#1f2630; --ok:#36c38a;
-    }
-    html,body{height:100%}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text);}
-    .container{max-width:880px;margin:0 auto;padding:28px}
-    h1{font-size:22px;margin:0 0 16px;font-weight:600}
-    .subtitle{color:var(--muted);margin-bottom:22px}
-    .row{margin:12px 0}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
-    fieldset{border:1px solid var(--border);border-radius:10px;padding:12px;margin:0 0 12px}
-    legend{padding:0 6px;color:var(--muted)}
-    label{display:flex;align-items:center;gap:10px;margin:8px 0}
-    select, input[type="file"]{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#0e1418;color:var(--text)}
-    .small{color:var(--muted);font-size:12px}
-    .hint{margin-top:6px}
-    button{padding:10px 14px;border-radius:10px;border:1px solid var(--accent-2);background:var(--accent);color:#001733;cursor:pointer;transition:filter .15s ease}
-    button:hover{filter:brightness(1.1)}
-    button.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#eaf4ff;border-color:var(--accent-2)}
-    ul{margin:6px 0 0 18px}
-    code{background:#0f1820;border:1px solid var(--border);padding:2px 5px;border-radius:6px;color:#c9e1ff}
-    .ok{color:var(--ok)}
-    .info{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:8px;border:1px solid var(--border);border-radius:50%;font-size:11px;line-height:1;color:var(--muted);background:#0e1418;cursor:help;position:relative}
-    .info:hover{color:#cfe4ff;border-color:#35527a}
-    .info[data-tip]:hover::after{
-      content: attr(data-tip);
-      position:absolute;left:20px;top:50%;transform:translateY(-50%);
-      max-width:360px;white-space:normal;z-index:10;
-      background:#0f1820;color:#e6ebf1;border:1px solid var(--border);border-radius:10px;
-      padding:8px 10px;box-shadow:0 6px 18px rgba(0,0,0,.35);
-    }
-  </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Privateness.network — Data Protection (Options)</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0b0f12;
+            --panel: #12171b;
+            --muted: #7b8693;
+            --text: #e6ebf1;
+            --accent: #4ea1ff;
+            --accent-2: #2a6fd6;
+            --border: #1f2630;
+            --ok: #36c38a;
+        }
+
+        /* Subtle verification badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 8px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: #0e1418;
+            color: var(--muted);
+            font-size: 11px;
+            margin-left: 10px
+        }
+
+        .badge img {
+            width: 12px;
+            height: 12px;
+            opacity: .9
+        }
+
+        .badge a {
+            color: inherit;
+            text-decoration: none
+        }
+
+        .badge:hover {
+            border-color: #35527a;
+            color: #cfe4ff
+        }
+
+        html,
+        body {
+            height: 100%
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 28px
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 16px;
+            font-weight: 600
+        }
+
+        .subtitle {
+            color: var(--muted);
+            margin-bottom: 22px
+        }
+
+        .row {
+            margin: 12px 0
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 14px
+        }
+
+        fieldset {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            margin: 0 0 12px
+        }
+
+        legend {
+            padding: 0 6px;
+            color: var(--muted)
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0
+        }
+
+        select,
+        input[type="file"] {
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #0e1418;
+            color: var(--text)
+        }
+
+        .small {
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .hint {
+            margin-top: 6px
+        }
+
+        button {
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--accent-2);
+            background: var(--accent);
+            color: #001733;
+            cursor: pointer;
+            transition: filter .15s ease
+        }
+
+        button:hover {
+            filter: brightness(1.1)
+        }
+
+        button.primary {
+            background: linear-gradient(180deg, var(--accent), var(--accent-2));
+            color: #eaf4ff;
+            border-color: var(--accent-2)
+        }
+
+        ul {
+            margin: 6px 0 0 18px
+        }
+
+        code {
+            background: #0f1820;
+            border: 1px solid var(--border);
+            padding: 2px 5px;
+            border-radius: 6px;
+            color: #c9e1ff
+        }
+
+        .ok {
+            color: var(--ok)
+        }
+
+        .info {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            margin-left: 8px;
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            font-size: 11px;
+            line-height: 1;
+            color: var(--muted);
+            background: #0e1418;
+            cursor: help;
+            position: relative
+        }
+
+        .info:hover {
+            color: #cfe4ff;
+            border-color: #35527a
+        }
+
+        .info[data-tip]:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            max-width: 360px;
+            white-space: normal;
+            z-index: 10;
+            background: #0f1820;
+            color: #e6ebf1;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+        }
+
+        /* Benji global enable button */
+        .benji {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: .85
+        }
+
+        .benji.on {
+            background: #0f3e18;
+            color: #b4ffd0;
+            border-color: #1f6a34;
+            box-shadow: 0 0 0 2px rgba(55, 190, 120, .25) inset
+        }
+
+        .benji.off {
+            background: #3b0f13;
+            color: #ffd4d6;
+            border-color: #7a3539;
+            box-shadow: 0 0 0 2px rgba(190, 55, 55, .25) inset
+        }
+
+        .toggle {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: #0e1418;
+            color: var(--text);
+            cursor: pointer
+        }
+
+        .toggle.on {
+            background: #133b1e;
+            color: #b4ffd0;
+            border-color: #1f6a34
+        }
+    </style>
 </head>
+
 <body>
-  <div class="container">
-    <div class="row" style="display:flex;align-items:center;gap:12px;margin-top:4px">
-      <img src="favicon.ico" alt="logo" width="28" height="28" style="border-radius:6px;border:1px solid var(--border);background:#0e1418" />
-      <div>
-        <h1 style="margin:0">Privateness.network — Data Protection</h1>
-        <div class="subtitle small">Privacy-preserving telemetry hardening with three modes including data poisoning</div>
-      </div>
-      <div style="margin-left:auto"></div>
-      <div class="card" style="display:flex;align-items:center;gap:10px;padding:8px 12px">
-        <div class="small" style="letter-spacing:.2px;color:var(--muted)">Threats countered</div>
-        <div id="threats" style="font-variant-numeric:tabular-nums;font-weight:600">0</div>
-        <button id="resetThreats" title="Reset counter" style="padding:6px 10px">Reset</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="row">
-        <label>Mode
-          <select id="mode">
-            <option value="baseline">Baseline</option>
-            <option value="moderate" selected>Moderate</option>
-            <option value="strict">Strict + Data Poisoning</option>
-          </select>
-        </label>
-        <div class="small hint">
-          Baseline: light protections, maximum compatibility. Moderate: balanced protections. Strict: strongest protections; untrusted sites get heavier noise.
+    <div class="container">
+        <div class="row" style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap">
+            <img src="favicon.ico" alt="logo" width="28" height="28" style="border-radius:6px;border:1px solid var(--border);background:#0e1418" />
+            <div>
+                <h1 style="margin:0;display:flex;align-items:center;gap:6px">
+                    Privateness — the quality of being private
+                    <span class="badge" title="Verified by EmerFV">
+                        <img src="favicon.ico" alt="" />
+                        <a href="https://emercoin.com/tech-solutions" target="_blank" rel="noreferrer noopener">Verified by EmerFV</a>
+                    </span>
+                </h1>
+                <div class="small">Powerful privacy protections with clear controls.</div>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+                <button id="benji" class="benji on" aria-pressed="true" title="Global protection (Benji)">B</button>
+                <button id="auditToggle" class="toggle" aria-pressed="false" title="Audit/Diagnostic mode">Audit/Diagnostics: Off</button>
+            </div>
         </div>
-      </div>
+
+        <div class="card">
+            <div class="row">
+                <label>Mode
+                    <select id="mode">
+                        <option value="baseline">Baseline</option>
+                        <option value="moderate" selected>Moderate</option>
+                        <option value="strict">Strict + Data Poisoning</option>
+                    </select>
+                </label>
+                <div class="small hint">
+                    Baseline: light protections, maximum compatibility. Moderate: balanced protections. Strict: strongest protections; untrusted sites get heavier noise.
+                </div>
+            </div>
+        </div>
+
+        <fieldset class="card">
+            <legend>Modules</legend>
+            <label><input type="checkbox" id="canvasNoise" checked> Canvas noise <span class="info" data-tip="Websites draw hidden images on a canvas to ID your device. We add tiny random noise so that picture isn’t the same every time.">i</span></label>
+            <label><input type="checkbox" id="audioNoise" checked> Audio noise <span class="info" data-tip="Audio chips have small quirks that can fingerprint you. We add tiny randomness to audio data so it can’t track you.">i</span></label>
+            <label><input type="checkbox" id="webglNoise" checked> WebGL noise & vendor clamp <span class="info" data-tip="WebGL can reveal your exact graphics card. We show a generic value and add tiny noise to block hardware fingerprinting.">i</span></label>
+            <label><input type="checkbox" id="perfQuantize" checked> Quantize performance.now() <span class="info" data-tip="Super-precise timers can track you by tiny delays. We round the timer so it’s less precise but still fine for normal use.">i</span></label>
+            <label><input type="checkbox" id="navigatorClamp" checked> Clamp navigator / Intl <span class="info" data-tip="We simplify your device info (CPU, memory, platform, languages) so sites see a generic setup instead of a unique one.">i</span></label>
+            <label><input type="checkbox" id="storageHygiene" checked> Storage hygiene (block common tracker keys) <span class="info" data-tip="Blocks known tracker IDs (like _ga, fbp) from being saved or read in localStorage/sessionStorage.">i</span></label>
+            <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
+        </fieldset>
+
+        <fieldset class="card">
+            <legend>Privacy Policy hashes</legend>
+            <div id="ppHashes" class="small">Computing…</div>
+        </fieldset>
+
+        <div class="row">
+            <button id="save" class="primary">Save</button>
+            <span id="status" class="small"></span>
+        </div>
+
+        <fieldset class="card">
+            <legend>Whitelist</legend>
+            <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
+            <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
+            <div id="wlWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="wlList" style="margin:0"></ul>
+            </div>
+        </fieldset>
+
+        <fieldset class="card">
+            <legend>Recent threats</legend>
+            <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div class="small" style="flex:1 1 auto">Latest events from rules or poisoning (auto-refresh). Use Reset to clear.</div>
+                <button id="fullLog" title="Open full log" style="padding:6px 10px">Full log</button>
+            </div>
+            <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
+            <div class="table-wrap scroll-area scroll-10" id="logsWrap" style="margin-top:6px;">
+                <table id="logsTable" style="width:100%;border-collapse:collapse;display:none">
+                    <thead>
+                        <tr style="text-align:left;color:var(--muted);font-size:12px">
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Time</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Method</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Action</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody"></tbody>
+                </table>
+            </div>
+        </fieldset>
+
+        <script src="options.js"></script>
+        <hr />
+        <footer class="small" style="margin-top:12px;opacity:.9">
+            Links:
+            <a href="https://privateness.network" target="_blank" rel="noreferrer noopener">Website</a>
+            <a href="PRIVACY.md" target="_blank" rel="noreferrer noopener">Privacy Policy</a>
+        </footer>
     </div>
-
-    <fieldset class="card">
-      <legend>Modules</legend>
-      <label><input type="checkbox" id="canvasNoise" checked> Canvas noise <span class="info" data-tip="Websites draw hidden images on a canvas to ID your device. We add tiny random noise so that picture isn’t the same every time.">i</span></label>
-      <label><input type="checkbox" id="audioNoise" checked> Audio noise <span class="info" data-tip="Audio chips have small quirks that can fingerprint you. We add tiny randomness to audio data so it can’t track you.">i</span></label>
-      <label><input type="checkbox" id="webglNoise" checked> WebGL noise & vendor clamp <span class="info" data-tip="WebGL can reveal your exact graphics card. We show a generic value and add tiny noise to block hardware fingerprinting.">i</span></label>
-      <label><input type="checkbox" id="perfQuantize" checked> Quantize performance.now() <span class="info" data-tip="Super-precise timers can track you by tiny delays. We round the timer so it’s less precise but still fine for normal use.">i</span></label>
-      <label><input type="checkbox" id="navigatorClamp" checked> Clamp navigator / Intl <span class="info" data-tip="We simplify your device info (CPU, memory, platform, languages) so sites see a generic setup instead of a unique one.">i</span></label>
-      <label><input type="checkbox" id="storageHygiene" checked> Storage hygiene (block common tracker keys) <span class="info" data-tip="Blocks known tracker IDs (like _ga, fbp) from being saved or read in localStorage/sessionStorage.">i</span></label>
-      <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
-    </fieldset>
-
-    <div class="row">
-      <button id="save" class="primary">Save</button>
-      <span id="status" class="small"></span>
-    </div>
-
-    <fieldset class="card">
-      <legend>Recent threats</legend>
-      <div class="small">Latest events from rules or poisoning (auto-refresh). Use Reset to clear.</div>
-      <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
-      <table id="logsTable" style="width:100%;border-collapse:collapse;display:none">
-        <thead>
-          <tr style="text-align:left;color:var(--muted);font-size:12px">
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Time</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Method</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Action</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="logsBody"></tbody>
-      </table>
-    </fieldset>
-
-    <fieldset class="card">
-      <legend>Whitelist</legend>
-      <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
-      <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
-      <ul id="wlList" style="margin-top:6px"></ul>
-    </fieldset>
-
-    <script src="options.js"></script>
-  </div>
 </body>
+
 </html>

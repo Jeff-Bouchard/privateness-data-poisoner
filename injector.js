@@ -29,6 +29,8 @@
     return 'moderate';
   }
   const MODE = normalizeMode(CFG.mode);
+  const ENABLED = (CFG.enabled !== false);
+  const AUDIT = !!CFG.auditMode;
   const WHITELIST = Array.isArray(CFG.whitelist) ? CFG.whitelist : [];
 
   // We no longer rely on static trusted origin lists. Compatibility is preserved by
@@ -50,7 +52,7 @@
     } catch { return false; }
   }
 
-  function shouldPoison(url){
+  function isMatch(url){
     try {
       if (isWhitelisted(url)) return false;
       const u = new URL(url, location.href);
@@ -58,9 +60,13 @@
       const p = u.pathname.toLowerCase();
       if (/collect|analytics|beacon|track|pixel|measure/.test(p)) return true;
       for (const [k] of u.searchParams) { if (/^(utm_|gclid|fbclid|msclkid|mc_eid)/i.test(k)) return true; }
-      if (MODE === 'strict' && isYouTubeTelemetry(url)) return true; // mutate YT telemetry only in strict
+      if (MODE === 'strict' && isYouTubeTelemetry(url)) return true;
     } catch {}
     return false;
+  }
+  function shouldPoison(url){
+    if (!ENABLED) return false;
+    return isMatch(url);
   }
 
   // Utility: fast PRF from hex key + string -> [0,1)
@@ -106,7 +112,10 @@
     }
   }
 
-  // sendBeacon suppression
+  // If fully disabled, exit without patching anything
+  if (!ENABLED) { return; }
+
+  // sendBeacon suppression / audit
   try {
     const origBeacon = navigator.sendBeacon?.bind(navigator);
     if (origBeacon) {
@@ -114,10 +123,14 @@
         try {
           const u = new URL(url, location.href);
           if (DENY.has(u.host)) return true;
+          if (AUDIT && isMatch(u.toString())){
+            postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'audit' });
+            return origBeacon(url, data);
+          }
           if (MODE === 'strict' && shouldPoison(u.toString())){
             const ct = '';
             const poisoned = buildPoison(data, ct);
-            postPoison({ url: u.toString(), method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '' });
+            postPoison({ url: u.toString(), method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
             return origBeacon(u.toString(), poisoned);
           }
           if (shouldPoison(u.toString())) return true; // silently swallow
@@ -134,6 +147,10 @@
           try {
             const req = new Request(input, init);
             const url = req.url;
+            if (AUDIT && isMatch(url)){
+              postPoison({ url, method: (req.method||'fetch'), preview: '', action: 'audit' });
+              return origFetch(input, init);
+            }
             if (MODE === 'strict' && shouldPoison(url)){
               const ct = extractContentType(req.headers);
               let body = undefined;
@@ -143,7 +160,7 @@
               if (ct && !/json|x-www-form-urlencoded/i.test(ct)) {
                 newInit.headers.set('content-type', 'application/json');
               }
-              postPoison({ url, method: (req.method||'fetch'), preview: typeof poisoned === 'string' ? poisoned : '' });
+              postPoison({ url, method: (req.method||'fetch'), preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
               return origFetch(url, newInit);
             }
             if (shouldPoison(url)){
@@ -167,9 +184,13 @@
         XHR.prototype.send = function(body){
           try {
             const url = this.__poise_url || '';
+            if (AUDIT && isMatch(url)){
+              postPoison({ url, method: 'xhr', preview: '', action: 'audit' });
+              return send.call(this, body);
+            }
             if (MODE === 'strict' && shouldPoison(url)){
               const poisoned = buildPoison(body, '');
-              postPoison({ url, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '' });
+              postPoison({ url, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
               return send.call(this, poisoned);
             }
             if (shouldPoison(url)) return send.call(this, undefined);
@@ -331,6 +352,10 @@
         const origSend = ws.send.bind(ws);
         ws.send = function(data){
           try {
+            if (AUDIT && isMatch(urlStr)){
+              postPoison({ url: urlStr, method: 'ws', preview: '', action: 'audit' });
+              return origSend(data);
+            }
             if (shouldPoison(urlStr) && typeof data === 'string' && data.trim().startsWith('{')){
               const parsed = JSON.parse(data);
               const mutated = mutateObject(parsed);

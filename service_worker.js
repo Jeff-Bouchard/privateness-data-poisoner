@@ -4,6 +4,9 @@
 const DEFAULT_CONFIG = {
   // Professional 3-mode model: 'baseline' | 'moderate' | 'strict'
   mode: 'moderate',
+  // Global protection switch and diagnostics mode
+  enabled: true,
+  auditMode: false,
   modules: {
     canvasNoise: true,
     audioNoise: true,
@@ -33,6 +36,9 @@ const DEFAULT_CONFIG = {
   ]
 };
 
+// Ephemeral in-memory recent events (MV3 service worker may be suspended; this is best-effort)
+let RECENT_EVENTS = [];
+
 function normalizeMode(m){
   const s = String(m||'').toLowerCase();
   if (['baseline','conservative','light'].includes(s)) return 'baseline';
@@ -59,6 +65,9 @@ async function getConfig() {
   // Normalize mode
   const normMode = normalizeMode(cfg.mode);
   if (cfg.mode !== normMode) { cfg.mode = normMode; changed = true; }
+  // Ensure booleans exist
+  if (typeof cfg.enabled !== 'boolean') { cfg.enabled = true; changed = true; }
+  if (typeof cfg.auditMode !== 'boolean') { cfg.auditMode = false; changed = true; }
   // Remove legacy fields
   if ('ytMode' in cfg) { delete cfg.ytMode; changed = true; }
   // Ensure modules object exists with defaults where missing
@@ -115,6 +124,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const next = { ...current, ...(message.config||{}) };
       // Deep-merge modules
       next.modules = { ...current.modules, ...((message.config||{}).modules||{}) };
+      // Normalize booleans
+      if (typeof next.enabled !== 'boolean') next.enabled = current.enabled;
+      if (typeof next.auditMode !== 'boolean') next.auditMode = current.auditMode;
       // Preserve denyHosts and whitelist unless explicitly provided
       if (!Array.isArray((message.config||{}).denyHosts)) next.denyHosts = current.denyHosts;
       if (!Array.isArray((message.config||{}).whitelist)) next.whitelist = current.whitelist;
@@ -156,8 +168,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === 'GET_LOGS') {
-      const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
-      sendResponse({ ok: true, logs: threat_logs });
+      const cfg = await getConfig();
+      if (cfg.auditMode) {
+        const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
+        sendResponse({ ok: true, logs: threat_logs });
+      } else {
+        // When not in audit mode, do not expose persisted logs
+        sendResponse({ ok: true, logs: [] });
+      }
+      return;
+    }
+    if (message?.type === 'GET_RECENT') {
+      // Return in-memory recent events (max 5), newest last
+      sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-5) });
       return;
     }
     if (message?.type === 'POISONED_EVENT') {
@@ -177,16 +200,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         },
         referrer: ev.referrer || '',
         ruleId: 'poison',
-        action: 'modify'
+        action: ev.action || 'modify'
       };
-      const next = threat_logs.concat(entry).slice(-100);
-      await chrome.storage.local.set({ threats_countered: threats_countered + 1, threat_logs: next });
+      const cfg = await getConfig();
+      // Always increment counter
+      await chrome.storage.local.set({ threats_countered: threats_countered + 1 });
+      if (cfg.auditMode) {
+        const next = threat_logs.concat(entry).slice(-100);
+        await chrome.storage.local.set({ threat_logs: next });
+      } else {
+        // Keep only in-memory last 5 when not auditing
+        RECENT_EVENTS = RECENT_EVENTS.concat(entry).slice(-5);
+      }
       sendResponse({ ok: true });
       return;
     }
     if (message?.type === 'RESET_STATS') {
       const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
       await chrome.storage.local.set({ threats_countered: 0, threat_logs: [] });
+      RECENT_EVENTS = [];
       sendResponse({ ok: true, logs: threat_logs });
       return;
     }
@@ -212,9 +244,15 @@ try {
           ruleId: info.rule?.id || info.ruleId || null,
           action: info.rule?.action?.type || info.action?.type || ''
         };
-        const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
-        const next = threat_logs.concat(entry).slice(-100); // keep last 100
-        await chrome.storage.local.set({ threats_countered: threats_countered + 1, threat_logs: next });
+        const cfg = await getConfig();
+        await chrome.storage.local.set({ threats_countered: threats_countered + 1 });
+        if (cfg.auditMode) {
+          const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
+          const next = threat_logs.concat(entry).slice(-100); // keep last 100
+          await chrome.storage.local.set({ threat_logs: next });
+        } else {
+          RECENT_EVENTS = RECENT_EVENTS.concat(entry).slice(-5);
+        }
       } catch (e) {
         // ignore
       }
