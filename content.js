@@ -14,7 +14,11 @@
   ]);
 
   // Default to professional 3-mode model: 'baseline' | 'moderate' | 'strict'
-  const cfg = okCfg ? config : { mode: 'moderate' };
+  const cfg = okCfg ? config : { mode: 'strict' };
+  if (cfg && cfg.enabled === false) {
+    // Protection OFF: do not inject, sanitize, or relay anything.
+    return;
+  }
   const perOriginKey = okKey ? key : '0'.repeat(64);
 
   // Inject CSP-safe DOM data bridge with config + key, then injector.js

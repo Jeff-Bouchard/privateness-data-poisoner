@@ -3,7 +3,7 @@
 
 const DEFAULT_CONFIG = {
   // Professional 3-mode model: 'baseline' | 'moderate' | 'strict'
-  mode: 'moderate',
+  mode: 'strict',
   // Global protection switch and diagnostics mode
   enabled: true,
   auditMode: false,
@@ -19,6 +19,8 @@ const DEFAULT_CONFIG = {
   },
   // User-managed origins where poisoning/suppression should be disabled
   whitelist: [],
+  // User-managed exact path whitelist (origin + pathname, no query/fragment)
+  whitelistPaths: [],
   // Basic denylist used in page-world sendBeacon overrides and content-side logic
   denyHosts: [
     'www.google-analytics.com', 'analytics.google.com', 'stats.g.doubleclick.net',
@@ -75,6 +77,7 @@ async function getConfig() {
   if (JSON.stringify(mods) !== JSON.stringify(cfg.modules||{})) { cfg.modules = mods; changed = true; }
   // Ensure whitelist array exists
   if (!Array.isArray(cfg.whitelist)) { cfg.whitelist = []; changed = true; }
+  if (!Array.isArray(cfg.whitelistPaths)) { cfg.whitelistPaths = []; changed = true; }
   if (changed) {
     await chrome.storage.local.set({ config: cfg });
   }
@@ -104,7 +107,30 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (!Array.isArray(threat_logs)) {
     await chrome.storage.local.set({ threat_logs: [] });
   }
+  // Ensure DNR ruleset state matches enabled/audit (disable if disabled or audit)
+  try {
+    const cfg = await getConfig();
+    if (chrome.declarativeNetRequest?.updateEnabledRulesets) {
+      const shouldDisable = (!cfg.enabled) || (!!cfg.auditMode);
+      if (shouldDisable) await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: ['rules_analytics'] });
+      else await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: ['rules_analytics'] });
+    }
+  } catch {}
 });
+
+// Also enforce ruleset state on browser startup
+try {
+  chrome.runtime.onStartup.addListener(async ()=>{
+    try {
+      const cfg = await getConfig();
+      if (chrome.declarativeNetRequest?.updateEnabledRulesets) {
+        const shouldDisable = (!cfg.enabled) || (!!cfg.auditMode);
+        if (shouldDisable) await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: ['rules_analytics'] });
+        else await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: ['rules_analytics'] });
+      }
+    } catch {}
+  });
+} catch {}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
@@ -130,13 +156,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Preserve denyHosts and whitelist unless explicitly provided
       if (!Array.isArray((message.config||{}).denyHosts)) next.denyHosts = current.denyHosts;
       if (!Array.isArray((message.config||{}).whitelist)) next.whitelist = current.whitelist;
+      if (!Array.isArray((message.config||{}).whitelistPaths)) next.whitelistPaths = current.whitelistPaths;
+      // Persist new config
       await chrome.storage.local.set({ config: next });
+      // Toggle DNR ruleset based on enabled/audit state to ensure proper behavior
+      try {
+        if (chrome.declarativeNetRequest?.updateEnabledRulesets) {
+          const shouldDisable = (!next.enabled) || (!!next.auditMode);
+          if (shouldDisable) await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: ['rules_analytics'] });
+          else await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: ['rules_analytics'] });
+        }
+      } catch {}
       sendResponse({ ok: true, config: next });
       return;
     }
     if (message?.type === 'GET_WHITELIST') {
       const cfg = await getConfig();
       sendResponse({ ok: true, whitelist: cfg.whitelist || [] });
+      return;
+    }
+    if (message?.type === 'GET_WHITELIST_PATHS') {
+      const cfg = await getConfig();
+      sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths || [] });
       return;
     }
     if (message?.type === 'ADD_TO_WHITELIST') {
@@ -152,6 +193,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
+    if (message?.type === 'ADD_TO_WHITELIST_PATHS') {
+      const path = String(message.path||'').trim(); // expected format: origin + pathname
+      try {
+        if (!path) { sendResponse({ ok:false, error:'no_path' }); return; }
+        const cfg = await getConfig();
+        const set = new Set(cfg.whitelistPaths||[]);
+        set.add(path);
+        cfg.whitelistPaths = Array.from(set).sort();
+        await chrome.storage.local.set({ config: cfg });
+        sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths });
+      } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
+      return;
+    }
     if (message?.type === 'REMOVE_FROM_WHITELIST') {
       const origin = String(message.origin||'').trim();
       try {
@@ -162,13 +216,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
+    if (message?.type === 'REMOVE_FROM_WHITELIST_PATHS') {
+      const path = String(message.path||'').trim();
+      try {
+        const cfg = await getConfig();
+        cfg.whitelistPaths = (cfg.whitelistPaths||[]).filter(p => p !== path);
+        await chrome.storage.local.set({ config: cfg });
+        sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths });
+      } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
+      return;
+    }
     if (message?.type === 'GET_STATS') {
+      const cfg = await getConfig();
+      if (!cfg.enabled) { sendResponse({ ok: true, threats: 0 }); return; }
       const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
       sendResponse({ ok: true, threats: threats_countered });
       return;
     }
     if (message?.type === 'GET_LOGS') {
       const cfg = await getConfig();
+      if (!cfg.enabled) { sendResponse({ ok: true, logs: [] }); return; }
       if (cfg.auditMode) {
         const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
         sendResponse({ ok: true, logs: threat_logs });
@@ -179,24 +246,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === 'GET_RECENT') {
+      const cfg = await getConfig();
+      if (!cfg.enabled) { sendResponse({ ok: true, logs: [] }); return; }
       // Return in-memory recent events (max 5), newest last
       sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-5) });
       return;
     }
     if (message?.type === 'POISONED_EVENT') {
       // Count and store a concise log of page-world poisoning events (no personal data)
+      const cfg = await getConfig();
+      if (!cfg.enabled) { sendResponse({ ok: true }); return; }
       const { threats_countered = 0, threat_logs = [] } = await chrome.storage.local.get(['threats_countered','threat_logs']);
       const ev = message.event || {};
       const entry = {
         time: Date.now(),
         request: { url: ev.url || '', method: ev.method || 'beacon', initiator: ev.initiator || (sender?.url || '') },
+        // In audit mode, annotate rule to reflect diagnostic nature
         ruleId: 'poison',
         action: ev.action || 'modify',
         preview: (typeof ev.preview === 'string' ? ev.preview : '')
       };
-      const cfg = await getConfig();
       // Always increment counter
       await chrome.storage.local.set({ threats_countered: threats_countered + 1 });
+      // If currently auditing, tag ruleId to signal diagnostic mode in UI
+      if (cfg.auditMode) {
+        entry.ruleId = (ev.ruleId ? String(ev.ruleId) : 'poison') + ' (audit)';
+        entry.action = ev.action ? String(ev.action) : 'audit';
+      }
       if (cfg.auditMode) {
         const next = threat_logs.concat(entry).slice(-100);
         await chrome.storage.local.set({ threat_logs: next });
@@ -224,6 +300,8 @@ try {
   if (chrome.declarativeNetRequest && chrome.declarativeNetRequest.onRuleMatchedDebug) {
     chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(async (info) => {
       try {
+        const cfg = await getConfig();
+        if (!cfg.enabled) return; // ignore when protection is OFF
         const { threats_countered = 0 } = await chrome.storage.local.get('threats_countered');
         // compose a compact log entry
         const entry = {
@@ -236,9 +314,11 @@ try {
           ruleId: info.rule?.id || info.ruleId || null,
           action: info.rule?.action?.type || info.action?.type || ''
         };
-        const cfg = await getConfig();
         await chrome.storage.local.set({ threats_countered: threats_countered + 1 });
         if (cfg.auditMode) {
+          // Tag entry to reflect audit mode; do not block/alter
+          entry.ruleId = String(entry.ruleId || 'rule') + ' (audit)';
+          entry.action = 'audit';
           const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
           const next = threat_logs.concat(entry).slice(-100); // keep last 100
           await chrome.storage.local.set({ threat_logs: next });

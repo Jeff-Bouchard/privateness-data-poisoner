@@ -15,6 +15,7 @@
             --accent: #4ea1ff;
             --accent-2: #2a6fd6;
             --border: #1f2630;
+            --border-strong: #2b3542;
             --ok: #36c38a;
         }
 
@@ -61,15 +62,15 @@
         }
 
         .container {
-            max-width: 880px;
+            max-width: 1440px;
             margin: 0 auto;
             padding: 28px
         }
 
         h1 {
-            font-size: 22px;
+            font-size: 24px;
             margin: 0 0 16px;
-            font-weight: 600
+            font-weight: 700
         }
 
         .subtitle {
@@ -83,17 +84,18 @@
 
         .card {
             background: var(--panel);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-strong);
             border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 14px
+            padding: 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 6px 22px rgba(0,0,0,.35);
         }
 
         fieldset {
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-strong);
             border-radius: 10px;
-            padding: 12px;
-            margin: 0 0 12px
+            padding: 14px;
+            margin: 0 0 14px
         }
 
         legend {
@@ -145,6 +147,14 @@
             color: #eaf4ff;
             border-color: var(--accent-2)
         }
+
+        /* Secondary buttons */
+        button.secondary {
+            background: #0f1820;
+            color: #cfe4ff;
+            border-color: var(--border-strong);
+        }
+        button.secondary:hover { filter: none; background: #13202c; }
 
         ul {
             margin: 6px 0 0 18px
@@ -261,8 +271,8 @@
         }
 
         .modal-card {
-            width: min(800px, 90vw);
-            max-height: 80vh;
+            width: min(1000px, 95vw);
+            max-height: 90vh;
             overflow: auto;
             background: var(--panel);
             border: 1px solid var(--border);
@@ -298,6 +308,70 @@
             text-decoration: underline;
             text-underline-offset: 2px
         }
+
+        /* Scroll areas to show more rows before scrolling */
+        .scroll-area { 
+            overflow: auto; 
+            border: 1px solid var(--border); 
+            border-radius: 10px;
+            background: #0f1418;
+        }
+        .scroll-5 { max-height: 260px; }
+        .scroll-10 { max-height: 520px; }
+
+        /* Tables and wraps */
+        .table-wrap { 
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            background: #0f1418;
+        }
+        #logsTable { width: 100%; table-layout: fixed; border-collapse: collapse; }
+        #logsTable th, #logsTable td { 
+            border-bottom: 1px solid var(--border);
+        }
+        #logsTable td { padding: 8px 10px; }
+        #logsTable thead th { 
+            position: sticky; 
+            top: 0; 
+            background: var(--panel);
+            box-shadow: 0 2px 0 0 var(--border) inset;
+            z-index: 1;
+        }
+        /* Column widths */
+        #logsTable th:nth-child(1), #logsTable td:nth-child(1) { width: 120px; }
+        #logsTable th:nth-child(2), #logsTable td:nth-child(2) { width: 220px; }
+        #logsTable th:nth-child(3), #logsTable td:nth-child(3) {
+            width: auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #logsTable th:nth-child(4), #logsTable td:nth-child(4) { width: 180px; }
+        #logsTable th:nth-child(5), #logsTable td:nth-child(5) { width: 120px; }
+        #logsTable tbody tr:hover { 
+            background: rgba(255,255,255,.02);
+        }
+
+        /* Focus styles */
+        button:focus-visible, input:focus-visible, select:focus-visible { 
+            outline: 2px solid var(--accent); 
+            outline-offset: 2px; 
+            box-shadow: 0 0 0 3px rgba(78,161,255,.25);
+        }
+
+        /* Whitelist list items clarity */
+        #wlList li { 
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 8px; border-bottom: 1px solid var(--border);
+        }
+        #wlList li:last-child { border-bottom: 0; }
+
+        /* Footer separation */
+        footer.small {
+            border-top: 1px solid var(--border-strong);
+            padding-top: 12px;
+            margin-top: 18px !important;
+        }
     </style>
 </head>
 
@@ -312,7 +386,7 @@
                 <div class="small">Powerful privacy protections with clear controls.</div>
             </div>
             <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
-                <button id="benji" class="benji on" aria-pressed="true" title="Global protection (Benji)">B</button>
+                <button id="benji" class="toggle on" aria-pressed="true" title="Global protection">Protection: On</button>
                 <button id="auditToggle" class="toggle" aria-pressed="false" title="Audit/Diagnostic mode">Audit/Diagnostics: Off</button>
             </div>
         </div>
@@ -332,16 +406,78 @@
             </div>
         </div>
 
+        <!-- Threats section (moved up) -->
         <fieldset class="card">
-            <legend>Modules</legend>
-            <label><input type="checkbox" id="canvasNoise" checked> Canvas noise <span class="info" data-tip="Websites draw hidden images on a canvas to ID your device. We add tiny random noise so that picture isn’t the same every time.">i</span></label>
-            <label><input type="checkbox" id="audioNoise" checked> Audio noise <span class="info" data-tip="Audio chips have small quirks that can fingerprint you. We add tiny randomness to audio data so it can’t track you.">i</span></label>
-            <label><input type="checkbox" id="webglNoise" checked> WebGL noise & vendor clamp <span class="info" data-tip="WebGL can reveal your exact graphics card. We show a generic value and add tiny noise to block hardware fingerprinting.">i</span></label>
-            <label><input type="checkbox" id="perfQuantize" checked> Quantize performance.now() <span class="info" data-tip="Super-precise timers can track you by tiny delays. We round the timer so it’s less precise but still fine for normal use.">i</span></label>
-            <label><input type="checkbox" id="navigatorClamp" checked> Clamp navigator / Intl <span class="info" data-tip="We simplify your device info (CPU, memory, platform, languages) so sites see a generic setup instead of a unique one.">i</span></label>
-            <label><input type="checkbox" id="storageHygiene" checked> Storage hygiene (block common tracker keys) <span class="info" data-tip="Blocks known tracker IDs (like _ga, fbp) from being saved or read in localStorage/sessionStorage.">i</span></label>
-            <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
+            <legend>Threats</legend>
+            <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div class="small" style="flex:1 1 auto">
+                    Blocked/poisoned: <strong id="threats">0</strong>
+                </div>
+                <button id="resetThreats" class="secondary" title="Reset counter and erase logs (threat traces)" style="padding:6px 10px">Reset</button>
+                <button id="fullLog" title="Open full log" style="padding:6px 10px">Full log</button>
+                <button id="seeAsTab" class="secondary" title="Open full log as tab" style="padding:6px 10px">See as tab</button>
+            </div>
+            <div class="small hint">Reset sets the counter back to 0 and clears persisted logs and recent in-memory events.</div>
+            <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
+            <div class="table-wrap scroll-area scroll-10" id="logsWrap" style="margin-top:6px;">
+                <table id="logsTable" style="width:100%;border-collapse:collapse;display:none">
+                    <thead>
+                        <tr style="text-align:left;color:var(--muted);font-size:12px">
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Time</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Path</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
+                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody"></tbody>
+                </table>
+            </div>
         </fieldset>
+
+        <!-- Whitelist (moved above Poisoning options) -->
+        <fieldset class="card">
+            <legend>Whitelist</legend>
+            <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
+            <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
+            <div id="wlWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="wlList" style="margin:0"></ul>
+            </div>
+            <div class="small" style="margin-top:12px;color:var(--muted)">Whitelisted paths (exact match on origin + pathname):</div>
+            <div id="wlPathsEmpty" class="small" style="color:var(--muted);margin-top:6px;display:none">No whitelisted paths.</div>
+            <div id="wlPathsWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="wlPathsList" style="margin:0"></ul>
+            </div>
+        </fieldset>
+
+        
+
+        
+
+        <div class="row">
+            <button id="save" class="primary">Save</button>
+            <span id="status" class="small"></span>
+        </div>
+
+    
+
+        
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal" aria-hidden="true" role="dialog">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Poisoned payload</strong>
+          <div id="previewMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
+          <button id="previewCopy" class="secondary" title="Copy preview to clipboard" style="margin-left:10px">Copy</button>
+          <button id="previewClose" style="margin-left:10px">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:8px;color:var(--muted)">A short preview of the payload sent after poisoning:</div>
+          <pre id="previewBody"></pre>
+        </div>
+      </div>
+    </div>
 
         
 
@@ -360,60 +496,16 @@
             <div id="defunctEmpty" class="small" style="color:var(--muted);">No custom names. Built‑in defaults will be used.</div>
         </fieldset>
 
-        <div class="row">
-            <button id="save" class="primary">Save</button>
-            <span id="status" class="small"></span>
-        </div>
-
-    
-
+        <!-- Modules moved after Poisoning options -->
         <fieldset class="card">
-            <legend>Whitelist</legend>
-            <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
-            <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
-            <div id="wlWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="wlList" style="margin:0"></ul>
-            </div>
-        </fieldset>
-
-    <!-- Preview Modal -->
-    <div id="previewModal" class="modal" aria-hidden="true" role="dialog">
-      <div class="modal-card">
-        <div class="modal-head">
-          <strong>Poisoned payload</strong>
-          <div id="previewMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
-          <button id="previewCopy" class="secondary" title="Copy preview to clipboard" style="margin-left:10px">Copy</button>
-          <button id="previewClose" style="margin-left:10px">Close</button>
-        </div>
-        <div class="modal-body">
-          <div class="small" style="margin-bottom:8px;color:var(--muted)">A short preview of the payload sent after poisoning:</div>
-          <pre id="previewBody"></pre>
-        </div>
-      </div>
-    </div>
-
-        <fieldset class="card">
-            <legend>Recent threats</legend>
-            <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <div class="small" style="flex:1 1 auto">Latest events from rules or poisoning (auto-refresh). Use Reset to clear.</div>
-                <button id="fullLog" title="Open full log" style="padding:6px 10px">Full log</button>
-            </div>
-            <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
-            <div class="table-wrap scroll-area scroll-10" id="logsWrap" style="margin-top:6px;">
-                <table id="logsTable" style="width:100%;border-collapse:collapse;display:none">
-                    <thead>
-                        <tr style="text-align:left;color:var(--muted);font-size:12px">
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Time</th>
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Method</th>
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Action</th>
-                            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logsBody"></tbody>
-                </table>
-            </div>
+            <legend>Modules</legend>
+            <label><input type="checkbox" id="canvasNoise" checked> Canvas noise <span class="info" data-tip="Websites draw hidden images on a canvas to ID your device. We add tiny random noise so that picture isn’t the same every time.">i</span></label>
+            <label><input type="checkbox" id="audioNoise" checked> Audio noise <span class="info" data-tip="Audio chips have small quirks that can fingerprint you. We add tiny randomness to audio data so it can’t track you.">i</span></label>
+            <label><input type="checkbox" id="webglNoise" checked> WebGL noise & vendor clamp <span class="info" data-tip="WebGL can reveal your exact graphics card. We show a generic value and add tiny noise to block hardware fingerprinting.">i</span></label>
+            <label><input type="checkbox" id="perfQuantize" checked> Quantize performance.now() <span class="info" data-tip="Super-precise timers can track you by tiny delays. We round the timer so it’s less precise but still fine for normal use.">i</span></label>
+            <label><input type="checkbox" id="navigatorClamp" checked> Clamp navigator / Intl <span class="info" data-tip="We simplify your device info (CPU, memory, platform, languages) so sites see a generic setup instead of a unique one.">i</span></label>
+            <label><input type="checkbox" id="storageHygiene" checked> Storage hygiene (block common tracker keys) <span class="info" data-tip="Blocks known tracker IDs (like _ga, fbp) from being saved or read in localStorage/sessionStorage.">i</span></label>
+            <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
         </fieldset>
 
         <script src="options.js"></script>

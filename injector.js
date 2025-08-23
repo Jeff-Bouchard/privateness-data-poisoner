@@ -32,6 +32,7 @@
   const ENABLED = (CFG.enabled !== false);
   const AUDIT = !!CFG.auditMode;
   const WHITELIST = Array.isArray(CFG.whitelist) ? CFG.whitelist : [];
+  const WHITELIST_PATHS = Array.isArray(CFG.whitelistPaths) ? CFG.whitelistPaths : [];
   // Custom defunct names from config (for brand/company/org replacement)
   let DEFUNCT_CUSTOM = [];
   try { const arr = CFG?.modules?.poisonConfig?.defunctNames; if (Array.isArray(arr)) DEFUNCT_CUSTOM = arr.filter(x=>typeof x==='string' && x.trim()).map(x=>x.trim()); } catch {}
@@ -51,7 +52,10 @@
       const pageOrigin = location.origin;
       if (WHITELIST.includes(pageOrigin)) return true;
       const u = new URL(url, location.href);
-      return WHITELIST.includes(u.origin);
+      if (WHITELIST.includes(u.origin)) return true;
+      const pathKey = u.origin + u.pathname;
+      if (WHITELIST_PATHS.includes(pathKey)) return true;
+      return false;
     } catch { return false; }
   }
 
@@ -125,7 +129,7 @@
       Object.defineProperty(navigator, 'sendBeacon', { configurable: true, writable: true, value: function(url, data){
         try {
           const u = new URL(url, location.href);
-          if (DENY.has(u.host)) return true;
+          if (DENY.has(u.host)) { postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'block' }); return true; }
           if (AUDIT && isMatch(u.toString())){
             postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'audit' });
             return origBeacon(url, data);
@@ -136,7 +140,7 @@
             postPoison({ url: u.toString(), method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
             return origBeacon(u.toString(), poisoned);
           }
-          if (shouldPoison(u.toString())) return true; // silently swallow
+          if (shouldPoison(u.toString())) { postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'suppress' }); return true; }
         } catch {}
         return origBeacon(url, data);
       }});
@@ -169,6 +173,7 @@
             if (shouldPoison(url)){
               // Reduce signal by sending no body
               const newInit = { ...(init||{}), body: undefined };
+              postPoison({ url, method: (req.method||'fetch'), preview: '', action: 'suppress' });
               return origFetch(url, newInit);
             }
           } catch {}
@@ -196,7 +201,7 @@
               postPoison({ url, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
               return send.call(this, poisoned);
             }
-            if (shouldPoison(url)) return send.call(this, undefined);
+            if (shouldPoison(url)) { postPoison({ url, method: 'xhr', preview: '', action: 'suppress' }); return send.call(this, undefined); }
           } catch {}
           return send.call(this, body);
         };
@@ -291,6 +296,10 @@
       window.fetch = async function(input, init){
         try {
           const url = (typeof input === 'string') ? input : input.url;
+          // In Audit mode: never mutate payloads; just pass through
+          if (AUDIT && isMatch(url)) {
+            return origFetch(input, init);
+          }
           if (shouldPoison(url)){
             const i = init ? { ...init } : undefined;
             if (i && i.body && typeof i.body === 'string'){
@@ -334,6 +343,10 @@
       XO.prototype.open = function(method, url, ...rest){ this.__mpUrl = url; return open.call(this, method, url, ...rest); };
       XO.prototype.send = function(body){
         try {
+          // In Audit mode: never mutate payloads; just pass through
+          if (AUDIT && isMatch(this.__mpUrl)){
+            return send.call(this, body);
+          }
           if (body && typeof body === 'string' && shouldPoison(this.__mpUrl)){
             if (body.trim().startsWith('{')){ try { const parsed = JSON.parse(body); body = JSON.stringify(mutateObject(parsed)); } catch {} }
           }

@@ -6,6 +6,14 @@ function normalizeMode(m){
   return 'moderate';
 }
 
+// Open the options page itself as a browser tab
+function openOptionsAsTab(){
+  try {
+    const url = chrome.runtime.getURL('options.html');
+    window.open(url, '_blank', 'noopener');
+  } catch {}
+}
+
 // Preview modal wiring
 function openPreview(text, meta){
   try {
@@ -108,7 +116,8 @@ async function loadConfig(){
     benji.classList.toggle('on', on);
     benji.classList.toggle('off', !on);
     benji.setAttribute('aria-pressed', on ? 'true' : 'false');
-    benji.title = on ? 'Global protection is ON' : 'Global protection is OFF';
+    benji.title = 'Global protection';
+    benji.textContent = `Protection: ${on ? 'On' : 'Off'}`;
   }
   if (auditBtn){
     const on = !!cfg.auditMode;
@@ -174,19 +183,32 @@ function renderLogs(logs){
   }
   empty.style.display = 'none';
   table.style.display = '';
-  for (const l of items10){
+  for (const l of items){
     const tr = document.createElement('tr');
     function td(text){ const el = document.createElement('td'); el.style.padding = '6px 8px'; el.textContent = text; return el; }
     const t = new Date(l.time).toLocaleTimeString();
-    const m = l.request?.method || '';
     const u = (()=>{ try { const a=new URL(l.request?.url||''); return a.origin + a.pathname; } catch { return l.request?.url||''; } })();
     const r = String(l.ruleId || '');
-    const a = String(l.action || '');
+    const isAudit = (String(l.action||'').toLowerCase()==='audit') || r.includes('(audit)');
     tr.appendChild(td(t));
-    tr.appendChild(td(m));
+    // Column 2: Path (origin + pathname)
     tr.appendChild(td(u));
-    // Make 'poison' clickable to preview payload
-    if (r === 'poison'){
+    // URL cell with tooltip for full URL (truncate at '?', prevent wrap)
+    {
+      const urlTd = document.createElement('td');
+      urlTd.style.padding = '6px 8px';
+      urlTd.style.whiteSpace = 'nowrap';
+      urlTd.style.overflow = 'hidden';
+      urlTd.style.textOverflow = 'ellipsis';
+      urlTd.style.maxWidth = '520px';
+      const fullUrl = l.request?.url || '';
+      const shown = (fullUrl || u).split('?')[0];
+      urlTd.textContent = shown;
+      if (fullUrl) urlTd.title = fullUrl;
+      tr.appendChild(urlTd);
+    }
+    // Make 'poison' clickable to preview payload (not in audit)
+    if (r === 'poison' && !isAudit){
       const el = document.createElement('td'); el.style.padding = '6px 8px';
       const link = document.createElement('span'); link.className = 'link'; link.textContent = 'poison';
       link.addEventListener('click', ()=>{
@@ -194,19 +216,28 @@ function renderLogs(logs){
       });
       el.appendChild(link); tr.appendChild(el);
     } else {
-      tr.appendChild(td(r));
+      const ruleTd = td(isAudit ? 'audit' : r);
+      ruleTd.style.whiteSpace = 'nowrap';
+      tr.appendChild(ruleTd);
     }
-    tr.appendChild(td(a));
-    // Action button: open the actual URL in a new tab
+    // Action button: whitelist this exact path (origin+pathname)
     const actionTd = document.createElement('td'); actionTd.style.padding = '6px 8px';
     const btn = document.createElement('button');
-    btn.textContent = 'Open';
+    btn.textContent = 'Whitelist path';
     btn.style.padding = '4px 8px';
-    btn.title = l.request?.url || '';
-    btn.addEventListener('click', ()=>{
-      const url = l.request?.url || '';
-      if (!url) return;
-      try { chrome.tabs.create({ url }); } catch { try { window.open(url, '_blank'); } catch {} }
+    btn.title = 'Add origin+pathname to whitelist';
+    btn.addEventListener('click', async ()=>{
+      const full = l.request?.url || '';
+      if (!full) return;
+      let pathKey = '';
+      try { const u = new URL(full); pathKey = u.origin + u.pathname; } catch { return; }
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: pathKey });
+        if (res && res.ok) {
+          btn.textContent = 'Whitelisted'; btn.disabled = true;
+          updateWhitelistPaths();
+        }
+      } catch {}
     });
     actionTd.appendChild(btn);
     tr.appendChild(actionTd);
@@ -238,6 +269,13 @@ async function updateThreats(){
     if (res && res.ok) {
       const el = document.getElementById('threats');
       if (el) el.textContent = String(res.threats || 0);
+      // Keep audit button label in sync with count
+      const auditBtn = document.getElementById('auditToggle');
+      if (auditBtn){
+        const on = auditBtn.classList.contains('on');
+        const count = res.threats || 0;
+        auditBtn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}${on ? ` — ${count} events` : ''}`;
+      }
     }
   } catch {}
 }
@@ -313,6 +351,44 @@ function renderWhitelist(list){
 updateWhitelist();
 setInterval(updateWhitelist, 5000);
 
+// Whitelist paths management
+async function updateWhitelistPaths(){
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'GET_WHITELIST_PATHS' });
+    if (res && res.ok) renderWhitelistPaths(res.whitelistPaths||[]);
+  } catch {}
+}
+
+function renderWhitelistPaths(list){
+  const wlList = document.getElementById('wlPathsList');
+  const wlEmpty = document.getElementById('wlPathsEmpty');
+  if (!wlList || !wlEmpty) return;
+  wlList.innerHTML = '';
+  const items = Array.isArray(list) ? list : [];
+  wlEmpty.style.display = items.length ? 'none' : '';
+  for (const item of items){
+    const li = document.createElement('li');
+    li.style.margin = '4px 0';
+    const code = document.createElement('code');
+    code.textContent = item;
+    const btn = document.createElement('button');
+    btn.textContent = 'Remove';
+    btn.style.marginLeft = '10px';
+    btn.addEventListener('click', async () => {
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'REMOVE_FROM_WHITELIST_PATHS', path: item });
+        if (res && res.ok) renderWhitelistPaths(res.whitelistPaths||[]);
+      } catch {}
+    });
+    li.appendChild(code);
+    li.appendChild(btn);
+    wlList.appendChild(li);
+  }
+}
+
+updateWhitelistPaths();
+setInterval(updateWhitelistPaths, 5000);
+
 // Toggle handlers
 document.getElementById('benji')?.addEventListener('click', async (e)=>{
   const btn = e.currentTarget;
@@ -320,7 +396,8 @@ document.getElementById('benji')?.addEventListener('click', async (e)=>{
   btn.classList.toggle('off');
   const enabled = btn.classList.contains('on');
   btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  btn.title = enabled ? 'Global protection is ON' : 'Global protection is OFF';
+  btn.title = 'Global protection';
+  btn.textContent = `Protection: ${enabled ? 'On' : 'Off'}`;
   const res = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
   const cfg = (res && res.ok) ? res.config : {};
   await chrome.runtime.sendMessage({ type: 'SET_CONFIG', config: { ...cfg, enabled } });
@@ -331,7 +408,11 @@ document.getElementById('auditToggle')?.addEventListener('click', async (e)=>{
   btn.classList.toggle('on');
   const on = btn.classList.contains('on');
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  btn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}`;
+  try {
+    const stats = await chrome.runtime.sendMessage({ type: 'GET_STATS' });
+    const count = (stats && stats.ok) ? (stats.threats||0) : 0;
+    btn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'} — ${count} events`;
+  } catch { btn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}`; }
   const res = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
   const cfg = (res && res.ok) ? res.config : {};
   await chrome.runtime.sendMessage({ type: 'SET_CONFIG', config: { ...cfg, auditMode: on } });
@@ -403,6 +484,7 @@ function escapeHtml(s){
 }
 
 document.getElementById('fullLog')?.addEventListener('click', openFullLog);
+document.getElementById('seeAsTab')?.addEventListener('click', openOptionsAsTab);
 
 // Privacy Policy hover preview (CSP-safe; no inline script)
 document.addEventListener('DOMContentLoaded', ()=>{
