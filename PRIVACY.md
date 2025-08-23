@@ -47,9 +47,8 @@ Privateness is “the quality of being private.” This browser extension protec
 
 - [privacy@privateness.network](mailto:privacy@privateness.network)
 
-## Vital links
+## Links
 
-- Emercoin DPO: <https://explorer.emercoin.com/dpo/PrivateNESS.Network>
 - Bitcointalk announcement: <https://bitcointalk.org/index.php?topic=5272741.0>
 
 ---

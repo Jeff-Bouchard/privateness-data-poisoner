@@ -28,6 +28,8 @@ Privacy extension for Chromium/Brave that reduces telemetry and fingerprinting. 
 - `injector.js` — page‑world protections (noise/clamps) and strict‑mode data poisoning hooks
 - `options.html`, `options.js` — Options UI with mode/modules, live counter, and Recent threats
 - `204.html` — empty page for safe redirects
+- `PRIVACY.md` — canonical Privacy Policy (rendered into HTML for download)
+- `privacy.html` — built HTML version of the Privacy Policy for download from the Options footer
 
 ## Modes
 
@@ -65,6 +67,7 @@ Key differences (selected):
 - In the Recent threats table, the Rule value `poison` is clickable.
 - Clicking it opens a modal with a short preview of the poisoned payload that was sent.
 - Only a compact preview is stored to keep storage usage low.
+- The footer provides a hover preview of the Privacy Policy content (first ~120 words from `PRIVACY.md`) when hovering the policy link.
 
 ## Poisoning options
 
@@ -73,6 +76,7 @@ These options affect how synthetic analytics payloads are built in Strict mode:
 - Include synthetic request ID (rid): adds a non-identifying request identifier.
 - Include timing jitter: adds small random timing to reduce correlatability.
 - Include synthetic PII hints: when JSON is used, optionally add clearly fake fields (email/name/phone). Off by default.
+- Custom defunct brand/company names: optional list used to replace brand/org/vendor fields in poisoned JSON for added plausibility.
 
 Notes:
 
@@ -83,6 +87,11 @@ Notes:
 
 - The Whitelist section (above Recent threats) lets you allow specific origins to bypass poisoning and suppression.
 - Removing an origin immediately re‑enables protections for that site.
+
+## Privacy Policy
+
+- The canonical policy is maintained in `PRIVACY.md`.
+- The Options footer links to a downloadable HTML copy (`privacy.html`). Hovering the link shows a brief preview from `PRIVACY.md`.
 
 ## Notes & Limits
 

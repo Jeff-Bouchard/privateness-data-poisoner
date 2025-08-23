@@ -308,10 +308,6 @@
             <div>
                 <h1 style="margin:0;display:flex;align-items:center;gap:6px">
                     Privateness — the quality of being private
-                    <span class="badge" title="Verified by EmerFV">
-                        <img src="favicon.ico" alt="" />
-                        <a href="https://emercoin.com/tech-solutions" target="_blank" rel="noreferrer noopener">Verified by EmerFV</a>
-                    </span>
                 </h1>
                 <div class="small">Powerful privacy protections with clear controls.</div>
             </div>
@@ -347,10 +343,7 @@
             <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
         </fieldset>
 
-        <fieldset class="card">
-            <legend>Privacy Policy hashes</legend>
-            <div id="ppHashes" class="small">Computing…</div>
-        </fieldset>
+        
 
         <fieldset class="card">
             <legend>Poisoning options (Strict mode)</legend>
@@ -372,31 +365,7 @@
             <span id="status" class="small"></span>
         </div>
 
-    <fieldset class="card">
-      <legend>Whitelist</legend>
-      <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
-      <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
-      <ul id="wlList" style="margin-top:6px"></ul>
-    </fieldset>
-
-    <fieldset class="card">
-      <legend>Recent threats</legend>
-      <div class="small">Latest events from rules or poisoning (auto-refresh). Use Reset to clear (Everything).</div>
-      <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
-      <table id="logsTable" style="width:100%;border-collapse:collapse;display:none">
-        <thead>
-          <tr style="text-align:left;color:var(--muted);font-size:12px">
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Time</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Method</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Action</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)"></th>
-          </tr>
-        </thead>
-        <tbody id="logsBody"></tbody>
-      </table>
-    </fieldset>
+    
 
         <fieldset class="card">
             <legend>Whitelist</legend>
@@ -449,10 +418,11 @@
 
         <script src="options.js"></script>
         <hr />
-        <footer class="small" style="margin-top:12px;opacity:.9">
+        <footer class="small" style="margin-top:12px;opacity:.9; position:relative">
             Links:
             <a href="https://privateness.network" target="_blank" rel="noreferrer noopener">Website</a>
-            <a href="PRIVACY.md" target="_blank" rel="noreferrer noopener">Privacy Policy</a>
+            <a id="ppLink" href="privacy.html" download rel="noreferrer noopener">Download Privacy Policy (HTML)</a>
+            <div id="ppPreview" role="tooltip" style="display:none; position:fixed; max-width:460px; background:#0f1418; color:#e6ebf1; border:1px solid #1f2630; border-radius:10px; padding:10px 12px; font-size:12px; box-shadow:0 6px 30px rgba(0,0,0,.4); z-index:9999"></div>
         </footer>
     </div>
 </body>

@@ -404,24 +404,38 @@ function escapeHtml(s){
 
 document.getElementById('fullLog')?.addEventListener('click', openFullLog);
 
-// Compute hashes for PRIVACY.md and render in UI
-async function computePrivacyHashes(){
+// Privacy Policy hover preview (CSP-safe; no inline script)
+document.addEventListener('DOMContentLoaded', ()=>{
   try {
-    const el = document.getElementById('ppHashes');
-    if (!el) return;
-    const res = await fetch('PRIVACY.md', { cache: 'no-store' });
-    if (!res.ok) { el.textContent = 'Unable to load privacy document'; return; }
-    const buf = await res.arrayBuffer();
-    const sha256 = await crypto.subtle.digest('SHA-256', buf);
-    const sha512 = await crypto.subtle.digest('SHA-512', buf);
-    const toHex = (ab)=>Array.from(new Uint8Array(ab)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    const h256 = toHex(sha256);
-    const h512 = toHex(sha512);
-    el.innerHTML = `<div>SHA-256: <code>${h256}</code></div><div>SHA-512: <code>${h512}</code></div>`;
-  } catch (e) {
-    const el = document.getElementById('ppHashes');
-    if (el) el.textContent = 'Hash computation failed';
-  }
-}
-
-computePrivacyHashes();
+    const link = document.getElementById('ppLink');
+    const tip = document.getElementById('ppPreview');
+    if (!link || !tip) return;
+    let cached = null; let fetching = false;
+    async function ensure(){
+      if (cached || fetching) return;
+      try {
+        fetching = true;
+        const res = await fetch('PRIVACY.md', { cache: 'no-store' });
+        const text = await res.text();
+        const plain = text.replace(/^[#>*`\-\s]+/gm,'').replace(/\[(.*?)\]\([^)]*\)/g,'$1');
+        const words = plain.split(/\s+/).filter(Boolean).slice(0,120).join(' ');
+        cached = words + (plain.split(/\s+/).length>120?'…':'');
+      } catch { cached = 'Privacy Policy preview unavailable.'; }
+      finally { fetching = false; }
+    }
+    function move(e){
+      const x = Math.min(window.innerWidth - tip.offsetWidth - 12, e.clientX + 16);
+      const y = Math.min(window.innerHeight - tip.offsetHeight - 12, e.clientY + 16);
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    }
+    link.addEventListener('mouseenter', async (e)=>{
+      await ensure();
+      tip.textContent = cached || '';
+      tip.style.display = 'block';
+      move(e);
+    });
+    link.addEventListener('mousemove', move);
+    link.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
+  } catch {}
+});
