@@ -30,6 +30,9 @@
   }
   const MODE = normalizeMode(CFG.mode);
   const WHITELIST = Array.isArray(CFG.whitelist) ? CFG.whitelist : [];
+  // Custom defunct names from config (for brand/company/org replacement)
+  let DEFUNCT_CUSTOM = [];
+  try { const arr = CFG?.modules?.poisonConfig?.defunctNames; if (Array.isArray(arr)) DEFUNCT_CUSTOM = arr.filter(x=>typeof x==='string' && x.trim()).map(x=>x.trim()); } catch {}
 
   // We no longer rely on static trusted origin lists. Compatibility is preserved by
   // applying mutations only to known analytics/telemetry endpoints and keeping
@@ -236,12 +239,18 @@
   function fakeUUID(){ const s=()=>Math.floor(rand()*0x10000).toString(16).padStart(4,'0'); return `${s()+s()}-${s()}-${s()}-${s()}-${s()+s()+s()}`; }
   function fakePhone(){ return `+1${Math.floor(2000000000+rand()*799999999)}`; }
   function fakeName(){ return `John Doe ${Math.floor(rand()*1000)}`; }
+  const DEFUNCT_BASE = ['Nortel','Melvin Capital','Blockbuster','MySpace','Lehman Brothers','AltaVista','Compaq','Palm','Kodak','Napster'];
+  function fakeDefunct(){
+    const pool = (DEFUNCT_CUSTOM.length ? DEFUNCT_CUSTOM : DEFUNCT_BASE);
+    return pool[Math.floor(rand()*pool.length)] || 'Nortel';
+  }
   function mutateKeyValue(k,v){
     const K = (k||'').toLowerCase();
     if (/email/.test(K)) return fakeEmail();
     if (/phone|tel/.test(K)) return fakePhone();
     if (/name|fullname|first|last/.test(K)) return fakeName();
     if (/uuid|id|client_id|cid|user_id/.test(K)) return fakeUUID();
+    if (/(brand|company|org|organization|vendor|employer|advertiser|client|app|product|agency)/.test(K)) return fakeDefunct();
     return v;
   }
   function mutateObject(obj){
@@ -438,21 +447,32 @@
   function buildPoison(data, contentType){
     try {
       const ts = Date.now();
+      const pCfg = (CFG.modules && CFG.modules.poisonConfig) || {};
+      const incRid = (pCfg.poisonIncludeRid !== false);
+      const incJit = (pCfg.poisonIncludeJitter !== false);
+      const incPII = !!pCfg.poisonIncludeFakePII;
       const rid = Math.floor(rand()*1e9).toString(36) + Math.floor(rand()*1e9).toString(36);
-      const base = { event: 'heartbeat', rid, ts, jitter: Math.floor(rand()*1000), meta: { locale: 'en-US', tz: 'UTC' } };
+      const base = { event: 'heartbeat', ts, meta: { locale: 'en-US', tz: 'UTC' } };
+      if (incRid) base.rid = rid;
+      if (incJit) base.jitter = Math.floor(rand()*1000);
       if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
         const params = new URLSearchParams(typeof data === 'string' ? data : '');
         params.set('e', base.event);
-        params.set('rid', rid);
+        if (incRid) params.set('rid', rid);
         params.set('ts', String(ts));
-        params.set('j', String(base.jitter));
+        if (incJit) params.set('j', String(base.jitter));
         return params.toString();
       }
       // JSON-ish
       let obj = {};
       if (typeof data === 'string') { try { obj = JSON.parse(data); } catch { obj = {}; } }
       else if (data && typeof data === 'object') { try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; } }
-      return JSON.stringify({ ...obj, ...base });
+      const merged = { ...obj, ...base };
+      if (incPII) {
+        // add clearly synthetic hints only when enabled
+        merged.pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
+      }
+      return JSON.stringify(merged);
     } catch { return data; }
   }
 
@@ -474,25 +494,11 @@
   // Notify isolated world (content.js) about poisoned sends
   function postPoison(ev){
     try {
-      const ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
-      let platform = '';
-      try { platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || ''; } catch {}
-      const isWin = /Windows|Win32|Win64|WOW64/i.test(platform) || /Windows NT/i.test(ua);
-      const tz = (()=>{ try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } })();
-      const lang = (()=>{ try { return navigator.language || (navigator.languages && navigator.languages[0]) || ''; } catch { return ''; } })();
-      const scr = (()=>{ try { return { w: screen.width||0, h: screen.height||0, aw: screen.availWidth||0, ah: screen.availHeight||0, dpr: (window.devicePixelRatio||1), cd: (screen.colorDepth||0) }; } catch { return {}; } })();
       const detail = {
         url: ev.url || '',
         method: ev.method || 'beacon',
         initiator: location.href,
-        preview: (ev.preview || '').toString().slice(0, 140),
-        ua,
-        platform,
-        win: !!isWin,
-        tz,
-        lang,
-        screen: scr,
-        referrer: (document && document.referrer) ? document.referrer : ''
+        preview: (ev.preview || '').toString().slice(0, 300)
       };
       window.dispatchEvent(new CustomEvent('__POISE_POISONED', { detail }));
     } catch {}

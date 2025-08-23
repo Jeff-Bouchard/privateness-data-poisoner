@@ -27,6 +27,14 @@
     ul{margin:6px 0 0 18px}
     code{background:#0f1820;border:1px solid var(--border);padding:2px 5px;border-radius:6px;color:#c9e1ff}
     .ok{color:var(--ok)}
+    /* Modal */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9999}
+    .modal.open{display:flex}
+    .modal-card{width:min(800px,90vw);max-height:80vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 28px rgba(0,0,0,.45)}
+    .modal-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+    .modal-body{padding:12px 14px}
+    .modal-body pre{white-space:pre-wrap;word-break:break-word;background:#0f1820;border:1px solid var(--border);padding:10px;border-radius:8px;color:#c9e1ff}
+    .link{color:#8ec1ff;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
     .info{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:8px;border:1px solid var(--border);border-radius:50%;font-size:11px;line-height:1;color:var(--muted);background:#0e1418;cursor:help;position:relative}
     .info:hover{color:#cfe4ff;border-color:#35527a}
     .info[data-tip]:hover::after{
@@ -64,7 +72,7 @@
           </select>
         </label>
         <div class="small hint">
-          Baseline: light protections, maximum compatibility. Moderate: balanced protections. Strict: strongest protections; untrusted sites get heavier noise.
+          Baseline: less intense protection for maximum compatibility. Moderate: balanced protection. Strict: strongest protection and active information warfare by data poisoning.
         </div>
       </div>
     </div>
@@ -80,14 +88,36 @@
       <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
     </fieldset>
 
+    <fieldset class="card">
+      <legend>Poisoning options (Strict mode)</legend>
+      <div class="small" style="margin-bottom:6px;color:var(--muted)">Affects how synthetic analytics payloads are constructed. Previews exclude personal data.</div>
+      <label><input type="checkbox" id="poisonIncludeRid" checked> Include synthetic request ID (rid)</label>
+      <label><input type="checkbox" id="poisonIncludeJitter" checked> Include timing jitter</label>
+      <label><input type="checkbox" id="poisonIncludeFakePII"> Include synthetic PII hints (email/name/phone) in JSON payloads</label>
+      <div class="small" style="margin:10px 0 6px;color:var(--muted)">Custom defunct brand/company names to use when replacing brand/org/vendor fields in poisoned JSON (optional):</div>
+      <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
+        <input id="defunctInput" type="text" placeholder="Add a defunct brand (e.g., Nortel)" style="flex:1; padding:6px 8px;">
+        <button id="defunctAdd" class="secondary">Add</button>
+      </div>
+      <ul id="defunctList" class="small" style="margin-left:18px"></ul>
+      <div id="defunctEmpty" class="small" style="color:var(--muted);">No custom names. Built‑in defaults will be used.</div>
+    </fieldset>
+
     <div class="row">
       <button id="save" class="primary">Save</button>
       <span id="status" class="small"></span>
     </div>
 
     <fieldset class="card">
+      <legend>Whitelist</legend>
+      <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
+      <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
+      <ul id="wlList" style="margin-top:6px"></ul>
+    </fieldset>
+
+    <fieldset class="card">
       <legend>Recent threats</legend>
-      <div class="small">Latest events from rules or poisoning (auto-refresh). Use Reset to clear.</div>
+      <div class="small">Latest events from rules or poisoning (auto-refresh). Use Reset to clear (Everything).</div>
       <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
       <table id="logsTable" style="width:100%;border-collapse:collapse;display:none">
         <thead>
@@ -97,19 +127,30 @@
             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">URL</th>
             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Rule</th>
             <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Action</th>
-            <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Actions</th>
+            <th style="padding:6px 8px;border-bottom:1px solid var(--border)"></th>
           </tr>
         </thead>
         <tbody id="logsBody"></tbody>
       </table>
     </fieldset>
 
-    <fieldset class="card">
-      <legend>Whitelist</legend>
-      <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
-      <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
-      <ul id="wlList" style="margin-top:6px"></ul>
-    </fieldset>
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal" aria-hidden="true" role="dialog">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Poisoned payload</strong>
+          <div id="previewMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
+          <button id="previewCopy" class="secondary" title="Copy preview to clipboard" style="margin-left:10px">Copy</button>
+          <button id="previewClose" style="margin-left:10px">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:8px;color:var(--muted)">A short preview of the payload sent after poisoning:</div>
+          <pre id="previewBody"></pre>
+        </div>
+      </div>
+    </div>
+
+    
 
     <script src="options.js"></script>
   </div>

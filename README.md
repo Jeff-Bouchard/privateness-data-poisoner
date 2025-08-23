@@ -1,51 +1,99 @@
-# Privateness.network Data Poisoner: Active Warfare Manifest V3 (Chromium)
+# Privateness.network — Data Protection (Manifest V3)
 
-Aggressive Manifest V3 extension to degrade tracking/fingerprinting surfaces. Modes: Conservative, Standard, Aggressive, Active Warfare.
+Privacy extension for Chromium/Brave that reduces telemetry and fingerprinting. Three modes: Baseline, Moderate, Strict + Data Poisoning.
 
 ## Install (Brave/Chromium)
 
 1. Open brave://extensions
 2. Enable "Developer mode".
 3. Click "Load unpacked" and choose the cloned project folder (this repo's root directory).
-4. Click the toolbar icon or open the options page to select mode (default: Aggressive).
+4. The options page opens in a tab (MV3 `options_ui`). Select a mode (default: Moderate).
+5. To apply edits, click "Update" (and/or the circular Reload icon) on the extension card.
 
 ## What it does
 
-- Strips common tracking params from URLs (DNR + link sanitation in `content.js`).
-- Blocks/redirects analytics beacons and pixels to `204.html`.
-- Page‑world patches in `injector.js` introduce deterministic, per‑origin noise:
-  - Canvas/WebGL/Audio readouts, performance.now quantization, navigator/Intl clamping, tracker‑key storage hygiene.
-- Modes increase intensity up to "Active Warfare" (most breakage risk).
+- Strips common tracking params from URLs (DNR removeParams + link sanitation in `content.js`).
+- Blocks/redirects many analytics beacons/pixels to `204.html` (see `rules_analytics.json`).
+- Page‑world protections in `injector.js` add deterministic per‑origin noise and clamps:
+  - Canvas/WebGL/Audio noise, `performance.now()` quantization, `Date.now()` skew/quantize, `navigator`/Intl clamps, storage hygiene.
+- Strict mode additionally poisons analytics payloads (sendBeacon/fetch/XHR) with plausible synthetic data instead of just suppressing.
+- Live threat counter and Recent threats panel show DNR matches and poisoning events.
 
 ## Files
 
-- `manifest.json` — MV3 config
-- `service_worker.js` — config, per‑origin key management
-- `rules_analytics.json` — DNR removeParams + block/redirect rules
-- `content.js` — injects page‑world patches; sanitizes links and current URL
-- `injector.js` — page‑world patches (noise + clamps)
-- `options.html`, `options.js` — UI to select mode and toggles
+- `manifest.json` — MV3 config (uses `options_ui.open_in_tab` and a service worker background)
+- `service_worker.js` — config storage, stats/logs, DNR match listener, message handling
+- `rules_analytics.json` — DNR removeParams + block/redirect/redirect-to-204 rules
+- `content.js` — injects page‑world script; sanitizes links; relays poisoning events to the SW
+- `injector.js` — page‑world protections (noise/clamps) and strict‑mode data poisoning hooks
+- `options.html`, `options.js` — Options UI with mode/modules, live counter, and Recent threats
 - `204.html` — empty page for safe redirects
-- `payload/` — JSON payload definitions (documentation only; no artifacts)
 
 ## Modes
 
-- Conservative: minimal noise, lowest breakage
-- Standard: balanced
-- Aggressive: heavier noise, blocks more beacons
-- Active Warfare: strongest clamps/noise, timezone/locale clamp, expect CAPTCHAs/breakage
+- Baseline: light protections, maximum compatibility
+- Moderate: balanced protections
+- Strict + Data Poisoning: strongest protections; analytics endpoints receive plausible synthetic payloads
 
-## Payload definitions (manual deployment)
+Key differences (selected):
 
-This project ships **no payload artifacts**. The `payload/` directory contains JSON definitions and schema for cataloging payloads you may deploy manually (outside the extension) where legal and ethical. The extension will not serve or transmit such files.
+- Noise amplitude (Canvas/Audio/WebGL): Baseline 0.0002, Moderate 0.0008, Strict 0.0025
+- Time quantization: `performance.now()` 4/8/12 ms; `Date.now()` ~6/12/25 ms + skew
+- NetworkInformation clamp: 4g/~70ms/50Mbps → 3g/~200ms/5Mbps → 2g/~800ms/1Mbps with saveData=true in Strict
+- Screen metrics: 16px quantization (Baseline/Moderate) → 32px (Strict); DPR forced to 1
+- Referrer: origin-only (Baseline/Moderate) → empty (Strict)
+- Telemetry: suppression (Baseline/Moderate) → poisoning (Strict)
+
+## Modules (with quick explanations)
+
+- Canvas noise: adds tiny noise to canvas pixels to prevent canvas fingerprint stability.
+- Audio noise: perturbs audio buffers and analyser reads to break audio fingerprinting.
+- WebGL noise & vendor clamp: returns generic vendor/renderer and adds slight noise to readPixels.
+- Quantize performance.now(): rounds the high‑resolution timer to reduce timing side‑channels.
+- Clamp navigator / Intl: normalizes hardwareConcurrency, deviceMemory, platform, languages, and User‑Agent Client Hints.
+- Storage hygiene: blocks common tracker keys (e.g., `_ga`, `fbp`) in localStorage/sessionStorage.
+- Block analytics beacons: suppresses or poisons sendBeacon/fetch/XHR/WebSocket to analytics endpoints.
+
+## Recent threats panel and logs
+
+- The options page displays a live counter (“Threats countered”) and a Recent threats table (last 25 events).
+- The Reset button clears counters and prints a concise table to the console.
+- Events come from DNR matches and strict‑mode poisoning hooks.
+
+### Clickable poison rule and payload preview
+
+- In the Recent threats table, the Rule value `poison` is clickable.
+- Clicking it opens a modal with a short preview of the poisoned payload that was sent.
+- Only a compact preview is stored to keep storage usage low.
+
+## Poisoning options
+
+These options affect how synthetic analytics payloads are built in Strict mode:
+
+- Include synthetic request ID (rid): adds a non-identifying request identifier.
+- Include timing jitter: adds small random timing to reduce correlatability.
+- Include synthetic PII hints: when JSON is used, optionally add clearly fake fields (email/name/phone). Off by default.
+
+Notes:
+
+- Logs and previews exclude personal data. They only show compact synthetic payload snippets.
+- Whitelisted origins bypass poisoning and suppression entirely.
+
+## Whitelist
+
+- The Whitelist section (above Recent threats) lets you allow specific origins to bypass poisoning and suppression.
+- Removing an origin immediately re‑enables protections for that site.
 
 ## Notes & Limits
 
-- MV3 limits header manipulation; DNR block/redirect is used where possible.
-- Monkey‑patching may be detectable and cause site issues.
-- Deterministic per‑origin noise reduces churn; still, be ready to whitelist sites if needed.
+- MV3 limits header/body manipulation; this extension uses DNR and page‑world APIs accordingly.
+- For compatibility, some high‑traffic properties (e.g., core YouTube domains) are excluded from hard DNR redirects in `rules_analytics.json`. Strict‑mode poisoning still applies and is counted.
+- Monkey‑patching can be detectable and may cause site issues.
+- Deterministic per‑origin noise reduces churn; you can tune modules in the options page.
 
 ## Development
 
-- Edit files and press the "Reload" button in brave://extensions for this extension.
-- Open DevTools for the extension service worker for logs.
+- Edit files and press "Update" or the circular Reload icon in brave://extensions.
+- Terminate the service worker (Inspect → Terminate) after large changes.
+- Open the options page from the extension card; it uses `options_ui` (opens in a tab).
+- Toolbar icon uses PNG; if it doesn’t display crisply, provide 16/32/48/128 PNGs and map them in `manifest.json`.
