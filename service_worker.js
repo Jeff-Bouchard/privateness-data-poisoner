@@ -130,9 +130,12 @@ try {
           ts: Date.now(),
           type: 'dnr',
           action: (info && info.rule && info.rule.action && info.rule.action.type) ? String(info.rule.action.type) : 'block',
-          url: info && info.request ? String(info.request.url||'') : '',
-          initiator: info && info.request && info.request.initiator ? String(info.request.initiator) : '',
-          ruleId: info && info.rule ? String(info.rule.id) : 'rule'
+          ruleId: (info && info.rule && info.rule.id) ? String(info.rule.id) : 'rule',
+          request: {
+            url: (info && info.request && info.request.url) ? String(info.request.url) : '',
+            initiator: (info && info.request && info.request.initiator) ? String(info.request.initiator) : '',
+            method: (info && info.request && info.request.method) ? String(info.request.method) : 'GET'
+          }
         };
         if (typeof info.tabId === 'number') entry.tabId = info.tabId;
         if (cfg.auditMode) {
@@ -187,7 +190,7 @@ function normalizeOriginToBase(origin){
 function buildBlockRulesFromConfig(cfg){
   const rules = [];
   let idBase = 910000; // distinct reserved range from allow rules
-  const addRule = (rule) => { rule.id = idBase++; rule.priority = 2000; rules.push(rule); };
+  const addRule = (rule) => { rule.id = idBase++; rule.priority = 3000; rules.push(rule); };
   // Origin-based block (base domain + any subdomain)
   for (const origin of (cfg.blacklist||[])){
     try {
@@ -625,6 +628,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return;
     }
+    if (message?.type === 'RESET_STATS') {
+      const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');
+      await chrome.storage.local.set({ threats_countered: 0 });
+      await clearRecent();
+      await updateBadge();
+      sendResponse({ ok: true, threats: 0, perTab: 0 });
+      return;
+    }
     if (message?.type === 'GET_RECENT') {
       const cfg = await getConfig();
       if (!cfg.enabled) { sendResponse({ ok: true, logs: [] }); return; }
@@ -650,9 +661,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ts: Date.now(),
         type: 'poison',
         action: ev.action || 'poison',
-        url: ev.url || '',
-        initiator: ev.initiator || (sender && sender.url) || '',
-        ruleId: ev.ruleId ? String(ev.ruleId) : 'poison'
+        ruleId: ev.ruleId ? String(ev.ruleId) : 'poison',
+        request: {
+          url: ev.url || '',
+          initiator: ev.initiator || (sender && sender.url) || '',
+          method: ev.method || 'N/A'
+        }
       };
       try { const tabId = sender?.tab?.id; if (typeof tabId === 'number') entry.tabId = tabId; } catch {}
       const { threat_logs = [] } = await chrome.storage.local.get('threat_logs');

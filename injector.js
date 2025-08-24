@@ -318,22 +318,22 @@
       Object.defineProperty(navigator, 'sendBeacon', { configurable: true, writable: true, value: function(url, data){
         try {
           const u = new URL(url, location.href);
-          if (AUDIT && isMatch(u.toString())){
-            postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'audit' });
-            return origBeacon(url, data);
+          if (shouldPoison(u.toString())){
+            if (AUDIT) {
+              postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'audit' });
+            } else if (MODE === 'strict') {
+              let newUrl = u.toString();
+              let newInit = { body: data, headers: new Headers() };
+              [newUrl, newInit] = applySchemas(newUrl, newInit);
+              newInit = tryMutateBody(newInit, (k,v)=>v);
+              const poisoned = buildPoison(newInit.body, '');
+              postPoison({ url: newUrl, method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+              return origBeacon(newUrl, poisoned);
+            } else {
+              postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'suppress' });
+              return true; // Suppress beacon
+            }
           }
-          if (MODE === 'strict' && shouldPoison(u.toString())){
-            let newUrl = u.toString();
-            let newInit = { body: data, headers: new Headers() };
-            // apply schema URL/header/body mutations
-            [newUrl, newInit] = applySchemas(newUrl, newInit);
-            newInit = tryMutateBody(newInit, (k,v)=>v);
-            const ct = '';
-            const poisoned = buildPoison(newInit.body, ct);
-            postPoison({ url: newUrl, method: 'beacon', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
-            return origBeacon(newUrl, poisoned);
-          }
-          if (shouldPoison(u.toString())) { postPoison({ url: u.toString(), method: 'beacon', preview: '', action: 'suppress' }); return true; }
         } catch {}
         return origBeacon(url, data);
       }});
@@ -347,29 +347,25 @@
           try {
             const req = new Request(input, init);
             const url = req.url;
-            if (AUDIT && isMatch(url)){
-              postPoison({ url, method: (req.method||'fetch'), preview: '', action: 'audit' });
-              return origFetch(input, init);
-            }
-            if (MODE === 'strict' && shouldPoison(url)){
-              let newUrl = url;
-              let newInit = { ...(init||{}), headers: new Headers(req.headers) };
-              // schema URL/header/body mutations first
-              [newUrl, newInit] = applySchemas(newUrl, newInit);
-              newInit = tryMutateBody(newInit, (k,v)=>v);
-              const ct = extractContentType(newInit.headers);
-              let body = newInit && 'body' in (newInit||{}) ? newInit.body : undefined;
-              const poisoned = buildPoison(body, ct);
-              newInit.body = poisoned;
-              if (ct && !/json|x-www-form-urlencoded/i.test(ct)) { newInit.headers.set('content-type', 'application/json'); }
-              postPoison({ url: newUrl, method: (req.method||'fetch'), preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
-              return origFetch(newUrl, newInit);
-            }
             if (shouldPoison(url)){
-              // Reduce signal by sending no body
-              const newInit = { ...(init||{}), body: undefined };
-              postPoison({ url, method: (req.method||'fetch'), preview: '', action: 'suppress' });
-              return origFetch(url, newInit);
+              if (AUDIT) {
+                postPoison({ url, method: (req.method||'fetch'), preview: '', action: 'audit' });
+              } else if (MODE === 'strict') {
+                let newUrl = url;
+                let newInit = { ...(init||{}), headers: new Headers(req.headers) };
+                [newUrl, newInit] = applySchemas(newUrl, newInit);
+                newInit = tryMutateBody(newInit, (k,v)=>v);
+                const ct = extractContentType(newInit.headers);
+                const poisoned = buildPoison(newInit.body, ct);
+                newInit.body = poisoned;
+                if (ct && !/json|x-www-form-urlencoded/i.test(ct)) { newInit.headers.set('content-type', 'application/json'); }
+                postPoison({ url: newUrl, method: (req.method||'fetch'), preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+                return origFetch(newUrl, newInit);
+              } else {
+                const newInit = { ...(init||{}), body: undefined };
+                postPoison({ url, method: (req.method||'fetch'), preview: '', action: 'suppress' });
+                return origFetch(url, newInit);
+              }
             }
           } catch {}
           return origFetch(input, init);
@@ -387,21 +383,23 @@
         XHR.prototype.send = function(body){
           try {
             const url = this.__poise_url || '';
-            if (AUDIT && isMatch(url)){
-              postPoison({ url, method: 'xhr', preview: '', action: 'audit' });
-              return send.call(this, body);
+            if (shouldPoison(url)){
+              if (AUDIT) {
+                postPoison({ url, method: 'xhr', preview: '', action: 'audit' });
+              } else if (MODE === 'strict') {
+                let newUrl = url;
+                let newInit = { body, headers: new Headers() };
+                [newUrl, newInit] = applySchemas(newUrl, newInit);
+                newInit = tryMutateBody(newInit, (k,v)=>v);
+                const poisoned = buildPoison(newInit.body, '');
+                postPoison({ url: newUrl, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
+                this.__poise_url = newUrl;
+                return send.call(this, poisoned);
+              } else {
+                postPoison({ url, method: 'xhr', preview: '', action: 'suppress' });
+                return send.call(this, undefined);
+              }
             }
-            if (MODE === 'strict' && shouldPoison(url)){
-              let newUrl = url;
-              let newInit = { body, headers: new Headers() };
-              [newUrl, newInit] = applySchemas(newUrl, newInit);
-              newInit = tryMutateBody(newInit, (k,v)=>v);
-              const poisoned = buildPoison(newInit.body, '');
-              postPoison({ url: newUrl, method: 'xhr', preview: typeof poisoned === 'string' ? poisoned : '', action: 'modify' });
-              this.__poise_url = newUrl;
-              return send.call(this, poisoned);
-            }
-            if (shouldPoison(url)) { postPoison({ url, method: 'xhr', preview: '', action: 'suppress' }); return send.call(this, undefined); }
           } catch {}
           return send.call(this, body);
         };
