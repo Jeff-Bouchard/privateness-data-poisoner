@@ -1,7 +1,21 @@
 'use strict';
 (function(){
   const $ = (id)=>document.getElementById(id);
-  function timeStr(ts){ try { return new Date(ts).toLocaleTimeString(); } catch { return ''; } }
+  function timeStr(ts){
+    try {
+      let ms = Number(ts);
+      if (!isFinite(ms)) {
+        const p = (typeof ts === 'string') ? Date.parse(ts) : NaN;
+        ms = isFinite(p) ? p : Date.now();
+      }
+      const d = new Date(ms);
+      if (isNaN(d.getTime())) return '';
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      const ss = String(d.getSeconds()).padStart(2,'0');
+      return `${hh}:${mm}:${ss}`;
+    } catch { return ''; }
+  }
   function originOf(u){ try { return new URL(u).origin; } catch { return ''; } }
   function pathKeyOf(u){ try { const p=new URL(u); let k=p.origin+p.pathname; if(!k.endsWith('/')) k+='/'; return k; } catch { return ''; } }
 
@@ -22,7 +36,10 @@
     const tr = document.createElement('tr');
     const t = document.createElement('td'); t.textContent = timeStr(entry.ts||Date.now()); tr.appendChild(t);
     const u = document.createElement('td');
-    const url = String(entry.url||'');
+    // Always display absolute URL (not just path). If entry.url is relative, resolve against initiator.
+    const urlRaw = String(entry.url||'');
+    let url = urlRaw;
+    try { url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); } catch {}
     u.textContent = url;
     u.title = url;
     u.style.whiteSpace = 'nowrap'; u.style.overflow = 'hidden'; u.style.textOverflow = 'ellipsis';

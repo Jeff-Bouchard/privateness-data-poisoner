@@ -6,6 +6,35 @@ function normalizeMode(m){
   return 'moderate';
 }
 
+// Robust time formatters
+function timeMs(ts){
+  let ms = Number(ts);
+  if (!isFinite(ms)){
+    const p = (typeof ts === 'string') ? Date.parse(ts) : NaN;
+    ms = isFinite(p) ? p : Date.now();
+  }
+  return ms;
+}
+function timeStr(ts){
+  const d = new Date(timeMs(ts));
+  if (isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  return `${hh}:${mm}:${ss}`;
+}
+function timeFull(ts){
+  const d = new Date(timeMs(ts));
+  if (isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mon = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  return `${yyyy}-${mon}-${day} ${hh}:${mm}:${ss}`;
+}
+
 // Open the Live log page as a browser tab
 function openLiveLogTab(){
   try {
@@ -287,7 +316,7 @@ function renderLogs(logs){
   for (const l of items){
     const tr = document.createElement('tr');
     function td(text){ const el = document.createElement('td'); el.style.padding = '6px 8px'; el.textContent = text; return el; }
-    const t = new Date(l.time).toLocaleTimeString();
+    const t = timeStr(l.time);
     const r = String(l.ruleId || '');
     const isAudit = (String(l.action||'').toLowerCase()==='audit') || r.includes('(audit)');
     tr.appendChild(td(t));
@@ -393,7 +422,6 @@ async function updateThreats(){
     }
   } catch {}
 }
-
 async function resetThreats(){
   const res = await chrome.runtime.sendMessage({ type: 'RESET_STATS' });
   try {
@@ -401,7 +429,7 @@ async function resetThreats(){
     if (logs.length) {
       const brief = logs.slice(-10).map(l=>{
         const u = (()=>{ try { const a=new URL(l.request?.url||''); return a.origin + a.pathname; } catch { return l.request?.url||''; } })();
-        return { t: new Date(l.time).toLocaleTimeString(), m: l.request?.method||'', u, r: l.ruleId||'', a: l.action||'' };
+        return { t: timeStr(l.time), m: l.request?.method||'', u, r: l.ruleId||'', a: l.action||'' };
       });
       console.info(`Privateness — ${logs.length} threat(s) since last reset. Showing last ${brief.length}:`);
       console.table(brief);
@@ -648,7 +676,7 @@ async function openFullLog(){
     const res = await chrome.runtime.sendMessage({ type: 'GET_LOGS' });
     const logs = (res && res.ok) ? (res.logs||[]) : [];
     const rows = logs.map(l=>{
-      const time = new Date(l.time).toLocaleString();
+      const time = timeFull(l.time);
       const method = l.request?.method||'';
       const url = l.request?.url||'';
       const rule = String(l.ruleId||'');
