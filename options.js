@@ -638,7 +638,7 @@ document.getElementById('threatScope')?.addEventListener('click', async ()=>{
     const btn = document.getElementById('threatScope');
     if (btn) btn.textContent = `Scope: ${next.statsPerTab ? 'This tab' : 'Global'}`;
     await chrome.runtime.sendMessage({ type: 'SET_CONFIG', config: { statsPerTab: next.statsPerTab } });
-    // Refresh counts and label immediately
+    // Refresh counts and labels immediately
     updateThreats();
   } catch {}
 });

@@ -1,5 +1,5 @@
 // Privateness.network Data Protection MV3 - service_worker.js
-// Manages configuration, per-origin keys, and messaging.
+// Manages configurations, per-origin keys, and messaging.
 
 const DEFAULT_CONFIG = {
   // Professional 3-mode model: 'baseline' | 'moderate' | 'strict'
