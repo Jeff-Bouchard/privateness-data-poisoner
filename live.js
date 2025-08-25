@@ -40,33 +40,47 @@
     const urlRaw = String(entry.url||'');
     let url = urlRaw;
     try { url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); } catch {}
-    u.textContent = url;
+    // Display only up to the first '?', and strip fragment
+    const displayUrl = (()=>{ try { const uo = new URL(url); return `${uo.origin}${uo.pathname}`; } catch { return String(url).split('#')[0].split('?')[0]; } })();
+    u.textContent = displayUrl;
     u.title = url;
-    u.style.whiteSpace = 'nowrap'; u.style.overflow = 'hidden'; u.style.textOverflow = 'ellipsis';
+    // Make long URLs usable: wrap/break and constrain width
+    u.style.whiteSpace = 'normal';
+    u.style.wordBreak = 'break-all';
+    u.style.overflow = 'hidden';
+    u.style.textOverflow = 'ellipsis';
+    u.style.maxWidth = '640px';
     tr.appendChild(u);
     const rule = document.createElement('td');
-    const type = entry.type || 'event';
-    const action = entry.action || '';
-    rule.textContent = `${type}${action?(' / '+action):''}`;
+    const typeRaw = (typeof entry.type === 'string') ? entry.type : '';
+    const type = typeRaw || (entry && entry.ruleId ? 'dnr' : 'event');
+    const actionRaw = (typeof entry.action === 'string') ? entry.action : '';
+    const action = actionRaw || (type === 'dnr' ? 'block' : '');
+    rule.textContent = action ? `${type} / ${action}` : String(type||'event');
+    if (entry && entry.ruleId) { rule.title = `Rule ${entry.ruleId}`; }
     tr.appendChild(rule);
     const act = document.createElement('td');
-    const bDom = document.createElement('button'); bDom.textContent = 'Blacklist domain'; bDom.className='secondary';
-    const bPath = document.createElement('button'); bPath.textContent = 'Blacklist path'; bPath.className='secondary'; bPath.style.marginLeft='6px';
-    bDom.addEventListener('click', async ()=>{
-      const orig = originOf(url); if (!orig) return;
+    // Pattern-based actions only
+    const wPat = document.createElement('button'); wPat.textContent = 'Allow pattern'; wPat.title = 'Add URL substring to whitelist patterns';
+    const bPat = document.createElement('button'); bPat.textContent = 'Block pattern'; bPat.className='secondary'; bPat.style.marginLeft='10px'; bPat.title = 'Add URL substring to blacklist patterns';
+    // Wire pattern actions (pre-fill with full URL; user can edit substring)
+    wPat.addEventListener('click', async ()=>{
+      const pat = prompt('Add whitelist pattern (substring of full URL):', url);
+      const pattern = (pat||'').trim(); if (!pattern) return;
       try {
-        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST', origin: orig });
-        if (res && res.ok){ bDom.textContent = 'Blacklisted'; bDom.disabled = true; setStatus('Domain added to blacklist.'); }
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATTERNS', pattern });
+        if (res && res.ok){ wPat.textContent = 'Allowed'; wPat.disabled = true; setStatus('Pattern added to whitelist.'); }
       } catch {}
     });
-    bPath.addEventListener('click', async ()=>{
-      const key = pathKeyOf(url); if (!key) return;
+    bPat.addEventListener('click', async ()=>{
+      const pat = prompt('Add blacklist pattern (substring of full URL):', url);
+      const pattern = (pat||'').trim(); if (!pattern) return;
       try {
-        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATHS', path: key });
-        if (res && res.ok){ bPath.textContent = 'Blacklisted'; bPath.disabled = true; setStatus('Path added to blacklist.'); }
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATTERNS', pattern });
+        if (res && res.ok){ bPat.textContent = 'Blocked'; bPat.disabled = true; setStatus('Pattern added to blacklist.'); }
       } catch {}
     });
-    act.appendChild(bDom); act.appendChild(bPath); tr.appendChild(act);
+    act.appendChild(wPat); act.appendChild(bPat); tr.appendChild(act);
     return tr;
   }
 

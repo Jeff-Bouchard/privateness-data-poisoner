@@ -340,13 +340,15 @@
         }
         /* Column widths (Path column removed) */
         #logsTable th:nth-child(1), #logsTable td:nth-child(1) { width: 120px; }
-        /* URL column — prefer horizontal space; enable horizontal scroll if needed */
+        /* URL column — make usable in popup: allow wrapping, no huge min-width */
         #logsTable th:nth-child(2), #logsTable td:nth-child(2) {
             width: auto;
-            white-space: nowrap;
-            overflow: visible;
-            text-overflow: clip;
-            min-width: 800px; /* forces table to grow; wrapper will scroll horizontally */
+            white-space: normal; /* allow wrapping */
+            word-break: break-all; /* break long URLs */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 220px;
+            max-width: 100%;
         }
         /* Rule */
         #logsTable th:nth-child(3), #logsTable td:nth-child(3) { width: 180px; }
@@ -376,6 +378,16 @@
             padding-top: 12px;
             margin-top: 18px !important;
         }
+        /* Sticky Quick Actions toolbar */
+        .sticky { position: sticky; top: 0; z-index: 100; }
+        .quick-actions {
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+            background: var(--panel); border: 1px solid var(--border-strong);
+            border-radius: 12px; padding: 12px; box-shadow: 0 6px 22px rgba(0,0,0,.35);
+        }
+        #qaUrl { flex: 1 1 420px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: #0e1418; color: var(--text); }
+        .qa-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .qa-hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
     </style>
 </head>
 
@@ -420,7 +432,6 @@
                 </div>
                 <button id="threatScope" class="secondary" title="Toggle threats scope (Global / This tab)" style="padding:6px 10px">Scope: Global</button>
                 <button id="resetThreats" class="secondary" title="Reset counter and erase logs (threat traces)" style="padding:6px 10px">Reset</button>
-                <button id="fullLog" title="Open persisted audit log" style="padding:6px 10px">Full audit log</button>
                 <button id="seeAsTab" class="secondary" title="Open Live log in a new tab" style="padding:6px 10px">Live log (tab)</button>
             </div>
             <div class="small hint">Reset sets the counter back to 0 and clears persisted logs and recent in-memory events.</div>
@@ -440,33 +451,46 @@
             </div>
         </fieldset>
 
-        <!-- Whitelist (moved above Poisoning options) -->
+        <!-- Quick Actions moved below Threats -->
+        <div class="card sticky" style="margin-top:10px;">
+            <div class="quick-actions" role="region" aria-label="Quick Actions">
+                <strong>Add allow/deny quickly (pattern)</strong>
+                <input id="qaUrl" type="text" placeholder="Pattern or URL (substring matched)" aria-label="Pattern or URL to match (substring)" />
+                <div class="qa-group">
+                    <button id="qaWLPattern" class="secondary" title="Whitelist by pattern (substring match over full URL)">Whitelist pattern</button>
+                    <button id="qaBLPattern" class="secondary" title="Blacklist by pattern (substring match over full URL)">Blacklist pattern</button>
+                </div>
+                <div class="qa-hint">Tip: leave input empty to use the current tab’s URL. Patterns are raw substrings, not regex.</div>
+            </div>
+        </div>
+
+        <!-- Whitelist (patterns only) -->
         <fieldset class="card">
             <legend>Whitelist</legend>
-            <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
-            <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
-            <div id="wlWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="wlList" style="margin:0"></ul>
+            <div class="small">Allowed patterns bypass protection. Patterns are substring matches against the full URL.</div>
+            <div class="small" style="margin-top:12px;color:var(--muted)">Whitelist patterns (substring match over full URL):</div>
+            <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
+                <input id="wlPatInput" type="text" placeholder="Add allow pattern (e.g., example.com/api)" style="flex:1; padding:6px 8px;">
+                <button id="wlPatAdd" class="secondary">Add</button>
             </div>
-            <div class="small" style="margin-top:12px;color:var(--muted)">Whitelisted paths (exact match on origin + pathname):</div>
-            <div id="wlPathsEmpty" class="small" style="color:var(--muted);margin-top:6px;display:none">No whitelisted paths.</div>
-            <div id="wlPathsWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="wlPathsList" style="margin:0"></ul>
+            <div id="wlPatEmpty" class="small" style="color:var(--muted);">No whitelist patterns.</div>
+            <div id="wlPatWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="wlPatList" style="margin:0"></ul>
             </div>
         </fieldset>
 
-        <!-- Blacklist -->
+        <!-- Blacklist (patterns only) -->
         <fieldset class="card">
             <legend>Blacklist</legend>
-            <div class="small">Blocked origins override whitelist and will always be protected. Click Remove to revoke.</div>
-            <div id="blEmpty" class="small" style="color:var(--muted);margin-top:6px">No blacklisted sites.</div>
-            <div id="blWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="blList" style="margin:0"></ul>
+            <div class="small">Blocked patterns enforce protection regardless of whitelist. Patterns are substring matches against the full URL.</div>
+            <div class="small" style="margin-top:12px;color:var(--muted)">Blacklist patterns (substring match over full URL):</div>
+            <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
+                <input id="blPatInput" type="text" placeholder="Add block pattern (e.g., tracker.com/pixel)" style="flex:1; padding:6px 8px;">
+                <button id="blPatAdd" class="secondary">Add</button>
             </div>
-            <div class="small" style="margin-top:12px;color:var(--muted)">Blacklisted paths (exact match on origin + pathname; subpaths included):</div>
-            <div id="blPathsEmpty" class="small" style="color:var(--muted);margin-top:6px;display:none">No blacklisted paths.</div>
-            <div id="blPathsWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="blPathsList" style="margin:0"></ul>
+            <div id="blPatEmpty" class="small" style="color:var(--muted);">No blacklist patterns.</div>
+            <div id="blPatWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
+                <ul id="blPatList" style="margin:0"></ul>
             </div>
         </fieldset>
 
@@ -498,41 +522,7 @@
       </div>
     </div>
 
-    <!-- Whitelist Choice Modal -->
-    <div id="wlModal" class="modal" aria-hidden="true" role="dialog">
-      <div class="modal-card">
-        <div class="modal-head">
-          <strong>Add to whitelist</strong>
-          <div id="wlMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
-          <button id="wlClose" style="margin-left:10px">Close</button>
-        </div>
-        <div class="modal-body">
-          <div class="small" style="margin-bottom:10px;color:var(--muted)">Choose the scope to bypass protection for this request:</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button id="wlDomain" class="secondary">Whitelist domain</button>
-            <button id="wlPath" class="secondary">Whitelist path (/…)</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Blacklist Choice Modal -->
-    <div id="blModal" class="modal" aria-hidden="true" role="dialog">
-      <div class="modal-card">
-        <div class="modal-head">
-          <strong>Add to blacklist</strong>
-          <div id="blMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
-          <button id="blClose" style="margin-left:10px">Close</button>
-        </div>
-        <div class="modal-body">
-          <div class="small" style="margin-bottom:10px;color:var(--muted)">Choose the scope to force protection for this request:</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button id="blDomain" class="secondary">Blacklist domain</button>
-            <button id="blPath" class="secondary">Blacklist path (/…)</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Legacy modals removed: pattern-based model supersedes domain/path choosers -->
 
         <fieldset class="card">
             <legend>Poisoning options (Strict mode)</legend>

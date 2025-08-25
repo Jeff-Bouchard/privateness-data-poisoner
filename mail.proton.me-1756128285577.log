@@ -1,0 +1,410 @@
+Error with Permissions-Policy header: Unrecognized feature: 'browsing-topics'.
+Error with Permissions-Policy header: Unrecognized feature: 'run-ad-auction'.
+Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'join-ad-interest-group'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-state-token-redemption'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-state-token-issuance'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-aggregation'.
+Error with Permissions-Policy header: Unrecognized feature: 'attribution-reporting'.
+Error with Permissions-Policy header: Unrecognized feature: 'browsing-topics'.
+Error with Permissions-Policy header: Unrecognized feature: 'run-ad-auction'.
+Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'join-ad-interest-group'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-state-token-redemption'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-state-token-issuance'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-aggregation'.
+Error with Permissions-Policy header: Unrecognized feature: 'attribution-reporting'.
+contrast-dark.theme.css:6 [Violation] 'message' handler took 608ms
+[Violation] Forced reflow while executing JavaScript took 80ms
+storefront.theme.css:6 [Violation] 'requestIdleCallback' handler took 61ms
+react-dom.production.min.js:187 [Violation] 'requestIdleCallback' handler took 79ms
+Error with Permissions-Policy header: Unrecognized feature: 'browsing-topics'.
+Error with Permissions-Policy header: Unrecognized feature: 'run-ad-auction'.
+Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'join-ad-interest-group'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-state-token-redemption'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-state-token-issuance'.
+Error with Permissions-Policy header: Unrecognized feature: 'private-aggregation'.
+Error with Permissions-Policy header: Unrecognized feature: 'attribution-reporting'.
+[Violation] 'click' handler took <N>ms
+[Violation] 'click' handler took <N>ms
+[Violation] 'click' handler took <N>ms
+[Violation] 'click' handler took <N>ms
+[Violation] 'click' handler took <N>ms
+[Violation] Forced reflow while executing JavaScript took 57ms
+injector.js:641  POST https://mail.proton.me/api/data/v1/stats net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+(anonymous) @ customConfig.ts:6
+m @ metrics.ts:81
+r @ useProtonTipsTelemetry.tsx:18
+sendTipDisplayedReport @ useProtonTipsTelemetry.tsx:30
+(anonymous) @ TipBox.tsx:64
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:282
+sj @ react-dom.production.min.js:282
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+[Violation] Forced reflow while executing JavaScript took 51ms
+injector.js:641  POST https://mail.proton.me/api/data/v1/stats net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+(anonymous) @ customConfig.ts:6
+m @ metrics.ts:81
+r @ useProtonTipsTelemetry.tsx:18
+sendTipDisplayedReport @ useProtonTipsTelemetry.tsx:30
+(anonymous) @ TipBox.tsx:64
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:282
+sj @ react-dom.production.min.js:282
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+createApi.ts:173 Uncaught (in promise) Error: Could not fetch server time
+    at createApi.ts:173:27
+    at async eventManager.ts:190:35
+(anonymous) @ createApi.ts:173
+Promise.then
+(anonymous) @ createApi.ts:167
+(anonymous) @ customConfig.ts:6
+getLatestEventID @ index.ts:336
+(anonymous) @ eventManager.ts:190
+await in (anonymous)
+i @ onceWithQueue.ts:43
+onClick @ SidebarItem.tsx:124
+onClick @ react-router-dom.js:133
+eB @ react-dom.production.min.js:54
+eV @ react-dom.production.min.js:54
+(anonymous) @ react-dom.production.min.js:55
+r7 @ react-dom.production.min.js:55
+ne @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+sD @ react-dom.production.min.js:273
+eP @ react-dom.production.min.js:52
+no @ react-dom.production.min.js:109
+tB @ react-dom.production.min.js:74
+tL @ react-dom.production.min.js:73
+injector.js:641  POST https://mail.proton.me/api/core/v4/reports/sentry/api/37/envelope/?sentry_key=dd8bad373df94806822e898158344eed&sentry_version=7&sentry_client=sentry.javascript.browser%2F7.120.4 net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+rz @ sentry.ts:77
+(anonymous) @ fetch.js:41
+(anonymous) @ base.js:53
+add @ promisebuffer.js:41
+a @ base.js:69
+_sendEnvelope @ baseclient.js:726
+sendEvent @ baseclient.js:339
+(anonymous) @ baseclient.js:682
+(anonymous) @ syncpromise.js:75
+(anonymous) @ syncpromise.js:179
+_executeHandlers @ syncpromise.js:172
+(anonymous) @ syncpromise.js:93
+I @ syncpromise.js:54
+then @ syncpromise.js:65
+_processEvent @ baseclient.js:641
+_captureEvent @ baseclient.js:566
+captureEvent @ baseclient.js:167
+captureEvent @ scope.js:635
+captureEvent @ hub.js:317
+eJ @ exports.js:53
+(anonymous) @ globalhandlers.js:98
+tv @ _handlers.js:42
+R.onunhandledrejection @ globalUnhandledRejection.js:27
+createApi.ts:173 Uncaught (in promise) Error: Could not fetch server time
+    at createApi.ts:173:27
+    at async eventManager.ts:190:35
+(anonymous) @ createApi.ts:173
+Promise.then
+(anonymous) @ createApi.ts:167
+(anonymous) @ customConfig.ts:6
+getLatestEventID @ index.ts:336
+(anonymous) @ eventManager.ts:190
+await in (anonymous)
+i @ onceWithQueue.ts:43
+onClick @ SidebarItem.tsx:124
+onClick @ react-router-dom.js:133
+eB @ react-dom.production.min.js:54
+eV @ react-dom.production.min.js:54
+(anonymous) @ react-dom.production.min.js:55
+r7 @ react-dom.production.min.js:55
+ne @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+sD @ react-dom.production.min.js:273
+eP @ react-dom.production.min.js:52
+no @ react-dom.production.min.js:109
+tB @ react-dom.production.min.js:74
+tL @ react-dom.production.min.js:73
+[Violation] Forced reflow while executing JavaScript took 51ms
+injector.js:641  POST https://mail.proton.me/api/data/v1/stats net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+(anonymous) @ customConfig.ts:6
+m @ metrics.ts:81
+r @ useProtonTipsTelemetry.tsx:18
+sendTipDisplayedReport @ useProtonTipsTelemetry.tsx:30
+(anonymous) @ TipBox.tsx:64
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:282
+sj @ react-dom.production.min.js:282
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+createApi.ts:173 Uncaught (in promise) Error: Could not fetch server time
+    at createApi.ts:173:27
+    at async eventManager.ts:190:35
+(anonymous) @ createApi.ts:173
+Promise.then
+(anonymous) @ createApi.ts:167
+(anonymous) @ customConfig.ts:6
+getLatestEventID @ index.ts:336
+(anonymous) @ eventManager.ts:190
+await in (anonymous)
+i @ onceWithQueue.ts:43
+onClick @ SidebarItem.tsx:124
+onClick @ react-router-dom.js:133
+eB @ react-dom.production.min.js:54
+eV @ react-dom.production.min.js:54
+(anonymous) @ react-dom.production.min.js:55
+r7 @ react-dom.production.min.js:55
+ne @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+sD @ react-dom.production.min.js:273
+eP @ react-dom.production.min.js:52
+no @ react-dom.production.min.js:109
+tB @ react-dom.production.min.js:74
+tL @ react-dom.production.min.js:73
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (facebook.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (twitter.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (youtube.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (instagram.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+trackers.ts:31 [debug] Processing decode rule (Global)
+trackers.ts:31 [debug] Processing decode rule (aliexpress.com)
+useInitIframeContent.ts:69 [Violation] Avoid using document.write(). https://developers.google.com/web/updates/2016/08/removing-document-write
+(anonymous) @ useInitIframeContent.ts:69
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+setTimeout
+(anonymous) @ trycatch.js:106
+(anonymous) @ promise.ts:1
+n @ promise.ts:1
+d @ messageRemotes.ts:98
+h @ transformRemote.ts:139
+(anonymous) @ useInitializeMessage.tsx:198
+C @ transforms.ts:66
+await in C
+(anonymous) @ useInitializeMessage.tsx:220
+await in (anonymous)
+o @ MessageView.tsx:252
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:282
+sj @ react-dom.production.min.js:282
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+injector.js:641  GET https://mail.proton.me/api/core/v4/keys/all?Email=aliexpress%40notice.aliexpress.com&InternalOnly=1 422 (Unprocessable Content)
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+m @ getAndVerifyApiKeys.ts:78
+x @ getPublicKeysEmailHelperWithKT.ts:46
+g @ getPublicKeysEmailHelper.ts:53
+(anonymous) @ useGetPublicKeysForInbox.ts:38
+sV @ useCachedModelResult.ts:76
+(anonymous) @ useGetPublicKeysForInbox.ts:48
+await in (anonymous)
+(anonymous) @ useGetVerificationPreferences.ts:85
+await in (anonymous)
+(anonymous) @ useGetVerificationPreferences.ts:145
+sV @ useCachedModelResult.ts:76
+(anonymous) @ useGetVerificationPreferences.ts:146
+(anonymous) @ useVerifyMessage.ts:70
+c @ MessageView.tsx:265
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+setTimeout
+(anonymous) @ trycatch.js:106
+(anonymous) @ promise.ts:1
+n @ promise.ts:1
+d @ messageRemotes.ts:98
+h @ transformRemote.ts:139
+(anonymous) @ useInitializeMessage.tsx:198
+C @ transforms.ts:66
+await in C
+(anonymous) @ useInitializeMessage.tsx:220
+await in (anonymous)
+o @ MessageView.tsx:252
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:282
+sj @ react-dom.production.min.js:282
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:266
+injector.js:641  POST https://mail.proton.me/api/data/v1/stats net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+(anonymous) @ customConfig.ts:6
+m @ metrics.ts:81
+sendSimpleActionReport @ useListTelemetry.tsx:142
+(anonymous) @ useMoveToFolder.tsx:80
+(anonymous) @ HeaderMoreDropdown.tsx:156
+eB @ react-dom.production.min.js:54
+eV @ react-dom.production.min.js:54
+(anonymous) @ react-dom.production.min.js:55
+r7 @ react-dom.production.min.js:55
+ne @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+sD @ react-dom.production.min.js:273
+eP @ react-dom.production.min.js:52
+no @ react-dom.production.min.js:109
+tB @ react-dom.production.min.js:74
+tL @ react-dom.production.min.js:73
+injector.js:641  POST https://mail.proton.me/api/data/v1/stats net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+(anonymous) @ customConfig.ts:6
+m @ metrics.ts:81
+r @ useProtonTipsTelemetry.tsx:18
+sendTipDisplayedReport @ useProtonTipsTelemetry.tsx:30
+(anonymous) @ TipBox.tsx:64
+oj @ react-dom.production.min.js:243
+sU @ react-dom.production.min.js:285
+sk @ react-dom.production.min.js:272
+n4 @ react-dom.production.min.js:127
+(anonymous) @ react-dom.production.min.js:282
+sj @ react-dom.production.min.js:282
+s_ @ react-dom.production.min.js:268
+_ @ scheduler.production.min.js:13
+T @ scheduler.production.min.js:14
+injector.js:641  POST https://mail.proton.me/api/data/v1/stats net::ERR_BLOCKED_BY_CLIENT
+window.fetch @ injector.js:641
+window.fetch @ injector.js:917
+(anonymous) @ fetch.js:43
+(anonymous) @ fetch.ts:49
+m @ fetch.ts:69
+f @ api.js:37
+r @ withApiHandlers.js:42
+p @ withApiHandlers.js:188
+(anonymous) @ createApi.ts:166
+(anonymous) @ customConfig.ts:6
+m @ metrics.ts:81
+sendSimpleActionReport @ useListTelemetry.tsx:142
+E @ MoreDropdown.tsx:119
+eB @ react-dom.production.min.js:54
+eV @ react-dom.production.min.js:54
+(anonymous) @ react-dom.production.min.js:55
+r7 @ react-dom.production.min.js:55
+ne @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+sD @ react-dom.production.min.js:273
+eP @ react-dom.production.min.js:52
+no @ react-dom.production.min.js:109
+tB @ react-dom.production.min.js:74
+tL @ react-dom.production.min.js:73
+n @ helpers.js:97
+createApi.ts:173 Uncaught (in promise) Error: Could not fetch server time
+    at createApi.ts:173:27
+    at async eventManager.ts:190:35
+(anonymous) @ createApi.ts:173
+Promise.then
+(anonymous) @ createApi.ts:167
+(anonymous) @ customConfig.ts:6
+getLatestEventID @ index.ts:336
+(anonymous) @ eventManager.ts:190
+await in (anonymous)
+i @ onceWithQueue.ts:43
+(anonymous) @ useEmptyLabel.tsx:49
+await in (anonymous)
+E @ MoreDropdown.tsx:124
+eB @ react-dom.production.min.js:54
+eV @ react-dom.production.min.js:54
+(anonymous) @ react-dom.production.min.js:55
+r7 @ react-dom.production.min.js:55
+ne @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+sD @ react-dom.production.min.js:273
+eP @ react-dom.production.min.js:52
+no @ react-dom.production.min.js:109
+tB @ react-dom.production.min.js:74
+tL @ react-dom.production.min.js:73
+n @ helpers.js:97

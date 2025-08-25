@@ -94,10 +94,23 @@ Notes:
 - Logs and previews exclude personal data. They only show compact synthetic payload snippets.
 - Whitelisted origins bypass poisoning and suppression entirely.
 
-## Whitelist
+## Pattern-based allow/block
 
-- The Whitelist section (above Recent threats) lets you allow specific origins to bypass poisoning and suppression.
-- Removing an origin immediately re‑enables protections for that site.
+- The Options UI provides two simple lists: whitelist patterns and blacklist patterns.
+- Patterns are raw text substrings matched against the full URL (protocol ignored in practice; matching is on the string).
+- Whitelist patterns create high‑priority allow rules and take precedence over blacklist patterns.
+- Blacklist patterns create block rules (or cause poisoning per mode) unless overridden by whitelist.
+
+Tips:
+
+- To allow an entire site, add a broad substring like `example.com`.
+- To narrow to a path or resource, include more of the URL (e.g., `example.com/docs` or `tracker.com/pixel`).
+- Quick Actions let you add the current tab URL as a pattern in one click (you can edit the input before adding).
+
+Notes:
+
+- The previous domain/path split UI has been removed to reduce complexity.
+- Internally, patterns are converted to `regexFilter` DNR rules like `.*<escaped-pattern>.*` for consistent matching across the extension.
 
 ## Privacy Policy
 
