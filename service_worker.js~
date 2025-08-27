@@ -22,9 +22,7 @@ const DEFAULT_CONFIG = {
   // User-managed origins where poisoning/suppression should be disabled
   whitelist: [],
   // Exact-origin captures for DNR initiator-based allow overrides
-  whitelistExactHosts: [
-     'proton.me', 'reddit.com',
-  ],
+  whitelistExactHosts: [],
   // User-managed exact path whitelist (origin + pathname, no query/fragment)
   whitelistPaths: [],
   // User-managed blacklist: always block/override allow rules
@@ -50,6 +48,31 @@ const DEFAULT_CONFIG = {
 
 // Ephemeral in-memory recent events (kept for quick access), with persisted backup
 let RECENT_EVENTS = [];
+
+// Clean up tab-based whitelist when tabs are closed
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const cfg = await getConfig();
+    let changed = false;
+    
+    if (cfg.tabWhitelist && cfg.tabWhitelist[tabId]) {
+      delete cfg.tabWhitelist[tabId];
+      changed = true;
+    }
+    
+    if (cfg.tabWhitelistPaths && cfg.tabWhitelistPaths[tabId]) {
+      delete cfg.tabWhitelistPaths[tabId];
+      changed = true;
+    }
+    
+    if (changed) {
+      await setConfig(cfg);
+      console.log('[Privateness] Cleaned up tab whitelist for closed tab:', tabId);
+    }
+  } catch (e) {
+    console.warn('[Privateness] Error cleaning up tab whitelist:', e);
+  }
+});
 const RECENT_KEY = 'recent_events'; // persisted circular buffer
 const RECENT_MAX = 100;
 
@@ -494,6 +517,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === 'ADD_TO_WHITELIST') {
       const origin = String(message.origin||'').trim(); // expected "https://host"
+      const tabId = message.tabId || sender?.tab?.id;
       try {
         if (!origin) { sendResponse({ ok:false, error:'no_origin' }); return; }
         const cfg = await getConfig();
@@ -506,7 +530,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const hexact = new Set(cfg.whitelistExactHosts||[]);
         if (host) { hexact.add(host.toLowerCase()); }
         cfg.whitelistExactHosts = Array.from(hexact).sort();
-        await chrome.storage.local.set({ config: cfg });
+        
+        // Apply bearer's authority: whitelist this tab for the origin
+        if (tabId) {
+          if (!cfg.tabWhitelist) cfg.tabWhitelist = {};
+          if (!cfg.tabWhitelist[tabId]) cfg.tabWhitelist[tabId] = [];
+          if (!cfg.tabWhitelist[tabId].includes(norm)) {
+            cfg.tabWhitelist[tabId].push(norm);
+            console.log('[Privateness] Tab', tabId, 'granted bearer authority for origin:', norm);
+          }
+        }
+        
+        await setConfig(cfg);
         try { await syncDnrAllowlist(cfg); } catch {}
         sendResponse({ ok: true, whitelist: cfg.whitelist });
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
@@ -529,15 +564,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === 'ADD_TO_WHITELIST_PATHS') {
       const path = normalizePathKey(String(message.path||'').trim());
+      const tabId = message.tabId || sender?.tab?.id;
       try {
         if (!path) { sendResponse({ ok:false, error:'no_path' }); return; }
         const cfg = await getConfig();
-        const set = new Set(cfg.whitelistPaths||[]);
-        set.add(path);
-        cfg.whitelistPaths = Array.from(set).sort();
-        await chrome.storage.local.set({ config: cfg });
-        try { await syncDnrAllowlist(cfg); } catch {}
-        sendResponse({ ok: true, whitelistPaths: cfg.whitelistPaths });
+        const list = Array.isArray(cfg.whitelistPaths) ? cfg.whitelistPaths : [];
+        if (!list.includes(path)) {
+          list.push(path);
+          await setConfig({ ...cfg, whitelistPaths: list });
+          console.log('[Privateness] Added to whitelist paths:', path);
+        }
+        
+        // Apply bearer's authority: whitelist this tab for the path
+        if (tabId) {
+          if (!cfg.tabWhitelistPaths) cfg.tabWhitelistPaths = {};
+          if (!cfg.tabWhitelistPaths[tabId]) cfg.tabWhitelistPaths[tabId] = [];
+          if (!cfg.tabWhitelistPaths[tabId].includes(path)) {
+            cfg.tabWhitelistPaths[tabId].push(path);
+            await setConfig(cfg);
+            console.log('[Privateness] Tab', tabId, 'granted bearer authority for path:', path);
+          }
+        }
+        
+        sendResponse({ ok: true, whitelistPaths: list });
       } catch (e) { sendResponse({ ok:false, error: String(e&&e.message||e) }); }
       return;
     }
@@ -650,6 +699,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return;
     }
+    if (message?.type === 'GET_TAB_ID') {
+      // Return the current tab ID for content script whitelist checks
+      const tabId = sender?.tab?.id;
+      sendResponse({ ok: true, tabId: typeof tabId === 'number' ? tabId : null });
+      return;
+    }
     if (message?.type === 'POISONED_EVENT') {
       // Count and store a concise log of page-world poisoning events (no personal data)
       const cfg = await getConfig();
@@ -690,9 +745,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // async
 });
 
-// Clean up per-tab counter when a tab is closed
+// Clean up per-tab counter and tab-based whitelist when a tab is closed
 try {
   if (chrome.tabs && chrome.tabs.onRemoved) {
-    chrome.tabs.onRemoved.addListener(async (tabId) => { try { await clearTabThreat(tabId); } catch {} });
+    chrome.tabs.onRemoved.addListener(async (tabId) => { 
+      try { 
+        await clearTabThreat(tabId); 
+        // Clean up tab-based whitelist entries
+        const cfg = await getConfig();
+        if (cfg.tabWhitelist && cfg.tabWhitelist[tabId]) {
+          delete cfg.tabWhitelist[tabId];
+          console.log('[Privateness] Cleaned up tab whitelist for closed tab:', tabId);
+        }
+        if (cfg.tabWhitelistPaths && cfg.tabWhitelistPaths[tabId]) {
+          delete cfg.tabWhitelistPaths[tabId];
+          console.log('[Privateness] Cleaned up tab whitelist paths for closed tab:', tabId);
+        }
+        await setConfig(cfg);
+      } catch {} 
+    });
   }
 } catch {}

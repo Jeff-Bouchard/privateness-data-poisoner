@@ -62,8 +62,8 @@
         }
 
         .container {
-            /* Expand horizontal space when opened as a tab (~90% viewport width) */
-            max-width: min(1920px, 90vw);
+            /* Expand horizontal space when opened as a tab (~95% viewport width for more button space) */
+            max-width: min(1920px, 95vw);
             margin: 0 auto;
             padding: 28px
         }
@@ -338,20 +338,17 @@
             box-shadow: 0 2px 0 0 var(--border) inset;
             z-index: 1;
         }
-        /* Column widths (Path column removed) */
-        #logsTable th:nth-child(1), #logsTable td:nth-child(1) { width: 120px; }
-        /* URL column — prefer horizontal space; enable horizontal scroll if needed */
-        #logsTable th:nth-child(2), #logsTable td:nth-child(2) {
-            width: auto;
+        /* Fixed column widths for steady visuals - truncate URLs properly */
+        #logsTable { table-layout: fixed; width: 100%; }
+        #logsTable th:nth-child(1), #logsTable td:nth-child(1) { width: 80px; } /* Time */
+        #logsTable th:nth-child(2), #logsTable td:nth-child(2) { width: auto; min-width: 200px; } /* URL (flexible but truncated) */
+        #logsTable th:nth-child(3), #logsTable td:nth-child(3) { width: 120px; } /* Rule */
+        #logsTable th:nth-child(4), #logsTable td:nth-child(4) { width: 200px; } /* Actions */
+        #logsTable td {
             white-space: nowrap;
-            overflow: visible;
-            text-overflow: clip;
-            min-width: 800px; /* forces table to grow; wrapper will scroll horizontally */
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        /* Rule */
-        #logsTable th:nth-child(3), #logsTable td:nth-child(3) { width: 180px; }
-        /* Actions */
-        #logsTable th:nth-child(4), #logsTable td:nth-child(4) { width: 140px; }
         #logsTable tbody tr:hover { 
             background: rgba(255,255,255,.02);
         }
@@ -391,7 +388,7 @@
             </div>
             <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
                 <button id="benji" class="toggle on" aria-pressed="true" title="Global protection">Protection: On</button>
-                <button id="auditToggle" class="toggle" aria-pressed="false" title="Audit/Diagnostic mode">Audit/Diagnostics: Off</button>
+                <button id="auditToggle" class="toggle" aria-pressed="false" title="Audit/Debug read-only mode">Audit/Debug read-only mode: Off</button>
             </div>
         </div>
 
@@ -420,8 +417,9 @@
                 </div>
                 <button id="threatScope" class="secondary" title="Toggle threats scope (Global / This tab)" style="padding:6px 10px">Scope: Global</button>
                 <button id="resetThreats" class="secondary" title="Reset counter and erase logs (threat traces)" style="padding:6px 10px">Reset</button>
-                <button id="fullLog" title="Open persisted audit log" style="padding:6px 10px">Full audit log</button>
                 <button id="seeAsTab" class="secondary" title="Open Live log in a new tab" style="padding:6px 10px">Live log (tab)</button>
+                <button id="exportConfig" class="secondary" title="Export configuration as JSON" style="padding:6px 10px">Export</button>
+                <button id="importConfig" class="secondary" title="Import configuration from JSON" style="padding:6px 10px">Import</button>
             </div>
             <div class="small hint">Reset sets the counter back to 0 and clears persisted logs and recent in-memory events.</div>
             <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>
@@ -440,47 +438,47 @@
             </div>
         </fieldset>
 
-        <!-- Whitelist (moved above Poisoning options) -->
+        <!-- Allow/Block Lists (consolidated) -->
         <fieldset class="card">
-            <legend>Whitelist</legend>
-            <div class="small">Allowed origins will bypass poisoning and suppression. Click Remove to revoke.</div>
-            <div id="wlEmpty" class="small" style="color:var(--muted);margin-top:6px">No whitelisted sites.</div>
-            <div id="wlWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="wlList" style="margin:0"></ul>
-            </div>
-            <div class="small" style="margin-top:12px;color:var(--muted)">Whitelisted paths (exact match on origin + pathname):</div>
-            <div id="wlPathsEmpty" class="small" style="color:var(--muted);margin-top:6px;display:none">No whitelisted paths.</div>
-            <div id="wlPathsWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="wlPathsList" style="margin:0"></ul>
-            </div>
-        </fieldset>
-
-        <!-- Blacklist -->
-        <fieldset class="card">
-            <legend>Blacklist</legend>
-            <div class="small">Blocked origins override whitelist and will always be protected. Click Remove to revoke.</div>
-            <div id="blEmpty" class="small" style="color:var(--muted);margin-top:6px">No blacklisted sites.</div>
-            <div id="blWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="blList" style="margin:0"></ul>
-            </div>
-            <div class="small" style="margin-top:12px;color:var(--muted)">Blacklisted paths (exact match on origin + pathname; subpaths included):</div>
-            <div id="blPathsEmpty" class="small" style="color:var(--muted);margin-top:6px;display:none">No blacklisted paths.</div>
-            <div id="blPathsWrap" class="scroll-area scroll-5" style="margin-top:6px;padding:6px 8px">
-                <ul id="blPathsList" style="margin:0"></ul>
+            <legend>Allow/Block Lists</legend>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <!-- Whitelist -->
+                <div>
+                    <h3 style="margin:0 0 8px;font-size:14px;color:var(--text)">Allow (bypass protection)</h3>
+                    <div class="small" style="margin-bottom:8px">Origins:</div>
+                    <div id="wlEmpty" class="small" style="color:var(--muted);margin-bottom:6px">No allowed sites.</div>
+                    <div id="wlWrap" class="scroll-area scroll-5" style="margin-bottom:12px;padding:6px 8px">
+                        <ul id="wlList" style="margin:0"></ul>
+                    </div>
+                    <div class="small" style="margin-bottom:6px">Paths:</div>
+                    <div id="wlPathsEmpty" class="small" style="color:var(--muted);margin-bottom:6px">No allowed paths.</div>
+                    <div id="wlPathsWrap" class="scroll-area scroll-5" style="padding:6px 8px">
+                        <ul id="wlPathsList" style="margin:0"></ul>
+                    </div>
+                </div>
+                <!-- Blacklist -->
+                <div>
+                    <h3 style="margin:0 0 8px;font-size:14px;color:var(--text)">Block (force protection)</h3>
+                    <div class="small" style="margin-bottom:8px">Origins:</div>
+                    <div id="blEmpty" class="small" style="color:var(--muted);margin-bottom:6px">No blocked sites.</div>
+                    <div id="blWrap" class="scroll-area scroll-5" style="margin-bottom:12px;padding:6px 8px">
+                        <ul id="blList" style="margin:0"></ul>
+                    </div>
+                    <div class="small" style="margin-bottom:6px">Paths:</div>
+                    <div id="blPathsEmpty" class="small" style="color:var(--muted);margin-bottom:6px">No blocked paths.</div>
+                    <div id="blPathsWrap" class="scroll-area scroll-5" style="padding:6px 8px">
+                        <ul id="blPathsList" style="margin:0"></ul>
+                    </div>
+                </div>
             </div>
         </fieldset>
 
         
 
-        
-<div class="row">
+        <div class="row">
             <button id="save" class="primary">Save</button>
             <span id="status" class="small"></span>
         </div>
-
-    
-
-        
 
     <!-- Preview Modal -->
     <div id="previewModal" class="modal" aria-hidden="true" role="dialog">
@@ -501,16 +499,36 @@
     <!-- Whitelist Choice Modal -->
     <div id="wlModal" class="modal" aria-hidden="true" role="dialog">
       <div class="modal-card">
-        <div class="modal-head">
-          <strong>Add to whitelist</strong>
-          <div id="wlMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
+        <div class="beta-warning">
+          ⚠️ <strong>BETA - Experimental Feature</strong><br>
+          Data poisoning is experimental. Results may vary across sites and tracking methods.
+        </div>
+        
+        <div class="help-section">
+          <h4>📖 How Data Poisoning Works</h4>
+          <p>This extension detects tracking requests and injects synthetic data to resist behavioral analysis:</p>
+          <ul>
+            <li><strong>Detection Patterns:</strong> Customizable schemas in <code>schemas/adultPersona.js</code></li>
+            <li><strong>Synthetic Data:</strong> Generated using master password + domain for consistency</li>
+            <li><strong>Reproducible:</strong> Same master password produces identical data per site</li>
+            <li><strong>File Logging:</strong> Export/import logs for cloning poisoning behavior</li>
+          </ul>
+          
+          <h4>🔑 Master Password Usage</h4>
+          <p>The master password combines with each domain to generate unique, consistent synthetic data:</p>
+          <ul>
+            <li><strong>Consistency:</strong> Same password = same synthetic data per site</li>
+            <li><strong>Uniqueness:</strong> Different domains get different synthetic profiles</li>
+            <li><strong>Cloning:</strong> Share password + logs to replicate exact poisoning behavior</li>
+            <li><strong>Security:</strong> Password never leaves your device</li>
+          </ul>
+        </div>
           <button id="wlClose" style="margin-left:10px">Close</button>
         </div>
         <div class="modal-body">
-          <div class="small" style="margin-bottom:10px;color:var(--muted)">Choose the scope to bypass protection for this request:</div>
+          <div class="small" style="margin-bottom:10px;color:var(--muted)">Allow this pattern to bypass protection:</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button id="wlDomain" class="secondary">Whitelist domain</button>
-            <button id="wlPath" class="secondary">Whitelist path (/…)</button>
+            <button id="wlPath" class="secondary">Allow pattern</button>
           </div>
         </div>
       </div>
@@ -519,27 +537,81 @@
     <!-- Blacklist Choice Modal -->
     <div id="blModal" class="modal" aria-hidden="true" role="dialog">
       <div class="modal-card">
-        <div class="modal-head">
-          <strong>Add to blacklist</strong>
-          <div id="blMeta" class="small" style="margin-left:auto;color:var(--muted)"></div>
+        <div class="beta-warning">
+          ⚠️ <strong>BETA - Experimental Feature</strong><br>
+          Data poisoning is experimental. Results may vary across sites and tracking methods.
+        </div>
+        
+        <div class="help-section">
+          <h4>📖 How Data Poisoning Works</h4>
+          <p>This extension detects tracking requests and injects synthetic data to resist behavioral analysis:</p>
+          <ul>
+            <li><strong>Detection Patterns:</strong> Customizable schemas in <code>schemas/adultPersona.js</code></li>
+            <li><strong>Synthetic Data:</strong> Generated using master password + domain for consistency</li>
+            <li><strong>Reproducible:</strong> Same master password produces identical data per site</li>
+            <li><strong>File Logging:</strong> Export/import logs for cloning poisoning behavior</li>
+          </ul>
+          
+          <h4>🔑 Master Password Usage</h4>
+          <p>The master password combines with each domain to generate unique, consistent synthetic data:</p>
+          <ul>
+            <li><strong>Consistency:</strong> Same password = same synthetic data per site</li>
+            <li><strong>Uniqueness:</strong> Different domains get different synthetic profiles</li>
+            <li><strong>Cloning:</strong> Share password + logs to replicate exact poisoning behavior</li>
+            <li><strong>Security:</strong> Password never leaves your device</li>
+          </ul>
+        </div>
           <button id="blClose" style="margin-left:10px">Close</button>
         </div>
         <div class="modal-body">
-          <div class="small" style="margin-bottom:10px;color:var(--muted)">Choose the scope to force protection for this request:</div>
+          <div class="small" style="margin-bottom:10px;color:var(--muted)">Block this pattern to force protection:</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button id="blDomain" class="secondary">Blacklist domain</button>
-            <button id="blPath" class="secondary">Blacklist path (/…)</button>
+            <button id="blPath" class="secondary">Block pattern</button>
           </div>
         </div>
       </div>
     </div>
 
         <fieldset class="card">
-            <legend>Poisoning options (Strict mode)</legend>
-            <div class="small" style="margin-bottom:6px;color:var(--muted)">Affects how synthetic analytics payloads are constructed. Previews exclude personal data.</div>
+            <legend>Data Poisoning (Strict mode)</legend>
+            <div style="background:#2d1b0e;border:1px solid #8b4513;border-radius:8px;padding:8px 12px;margin-bottom:12px">
+                <div class="small" style="color:#ff9500;font-weight:bold">⚠️ BETA-EXPERIMENTAL</div>
+                <div class="small" style="color:#ffb366;margin-top:4px">Advanced features below are experimental and may change. Use with caution in production environments.</div>
+            </div>
+            <div class="small" style="margin-bottom:12px;color:var(--muted)">
+                <strong>How it works:</strong> When trackers send requests, we intercept and replace their data with synthetic information using detection patterns (schemas). 
+                Each schema targets specific tracking services and generates consistent fake data per-origin to poison their datasets and resist behavioral analysis.
+            </div>
+            
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+                <div class="small" style="margin-bottom:8px"><strong>Built-in Detection Patterns:</strong></div>
+                <ul class="small" style="margin:0 0 8px 16px;color:var(--muted)">
+                    <li><strong>YouTube QoE:</strong> Replaces video quality metrics with synthetic bandwidth/buffer data</li>
+                    <li><strong>Facebook Pixel:</strong> Generates fake user IDs and event data for Meta tracking</li>
+                    <li><strong>TikTok Pixel:</strong> Injects synthetic device/location data for ByteDance analytics</li>
+                    <li><strong>Generic Analytics:</strong> Handles Google Analytics, Mixpanel, Segment, Hotjar, FullStory</li>
+                </ul>
+                <div class="small" style="color:var(--accent)">
+                    💡 <strong>User-configurable:</strong> You can modify detection patterns by editing <code>schemas/adultPersona.js</code> 
+                    to add new services, change synthetic data, or adjust targeting rules.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="masterPassword">Master Password (optional):</label>
+                <input type="password" id="masterPassword" placeholder="Leave empty for random seeding">
+                <div class="button-group">
+                    <button type="button" id="saveMasterPassword">Save</button>
+                    <button type="button" id="clearMasterPassword">Clear</button>
+                </div>
+                <small class="help-text">💡 Use a master password to generate consistent synthetic data across sessions. Same password + domain = same fake profile.</small>
+            </div>
+
+            <div class="small" style="margin-bottom:8px"><strong>Payload Options:</strong></div>
             <label><input type="checkbox" id="poisonIncludeRid" checked> Include synthetic request ID (rid)</label>
             <label><input type="checkbox" id="poisonIncludeJitter" checked> Include timing jitter</label>
             <label><input type="checkbox" id="poisonIncludeFakePII"> Include synthetic PII hints (email/name/phone) in JSON payloads</label>
+            <label><input type="checkbox" id="enableFileLogging" checked> Enable file-based logging for reproducibility</label>
             <div class="small" style="margin:10px 0 6px;color:var(--muted)">Custom defunct brand/company names to use when replacing brand/org/vendor fields in poisoned JSON (optional):</div>
             <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
                 <input id="defunctInput" type="text" placeholder="Add a defunct brand (e.g., Nortel)" style="flex:1; padding:6px 8px;">
@@ -547,6 +619,16 @@
             </div>
             <ul id="defunctList" class="small" style="margin-left:18px"></ul>
             <div id="defunctEmpty" class="small" style="color:var(--muted);">No custom names. Built‑in defaults will be used.</div>
+            
+            <div class="small" style="margin:16px 0 8px;border-top:1px solid var(--border);padding-top:12px"><strong>Logging & Export:</strong></div>
+            <div class="row" style="gap:8px;margin-bottom:8px">
+                <button id="exportLogs" class="secondary">Export Logs</button>
+                <button id="importLogs" class="secondary">Import Logs</button>
+                <button id="clearLogs" class="secondary">Clear Logs</button>
+                <button id="viewLogStats" class="secondary">View Stats</button>
+            </div>
+            <input type="file" id="importFile" accept=".json" style="display:none">
+            <div id="logStats" class="small" style="color:var(--muted);margin-top:8px"></div>
         </fieldset>
 
         <!-- Modules moved after Poisoning options -->
@@ -561,6 +643,7 @@
             <label><input type="checkbox" id="blockBeacons" checked> Block analytics beacons <span class="info" data-tip="Stops or replaces silent tracking pings (sendBeacon, fetch, XHR, WebSocket) to analytics servers.">i</span></label>
         </fieldset>
 
+        <script src="logging.js"></script>
         <script src="options.js"></script>
         <hr />
         <footer class="small" style="margin-top:12px;opacity:.9; position:relative">

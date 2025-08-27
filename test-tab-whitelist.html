@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tab-Based Whitelist Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        button { margin: 5px; padding: 8px 16px; }
+    </style>
+</head>
+<body>
+    <h1>Tab-Based Whitelist Test</h1>
+    
+    <div class="test-section">
+        <h3>Test 1: Tab ID Retrieval</h3>
+        <button onclick="testTabId()">Get Tab ID</button>
+        <div id="tabIdResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 2: Whitelist Origin with Tab Authority</h3>
+        <button onclick="testWhitelistOrigin()">Whitelist Current Origin</button>
+        <div id="whitelistResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 3: Whitelist Path with Tab Authority</h3>
+        <button onclick="testWhitelistPath()">Whitelist Current Path</button>
+        <div id="pathResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 4: Check Tab-Based Whitelist Status</h3>
+        <button onclick="checkWhitelistStatus()">Check Status</button>
+        <div id="statusResult" class="result"></div>
+    </div>
+
+    <script>
+        function sendToSW(msg) {
+            return new Promise(resolve => {
+                chrome.runtime.sendMessage(msg, resolve);
+            });
+        }
+
+        async function testTabId() {
+            const result = document.getElementById('tabIdResult');
+            try {
+                const response = await sendToSW({ type: 'GET_TAB_ID' });
+                if (response && response.ok && response.tabId) {
+                    result.className = 'result success';
+                    result.textContent = `✓ Tab ID retrieved: ${response.tabId}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `✗ Failed to get tab ID: ${JSON.stringify(response)}`;
+                }
+            } catch (e) {
+                result.className = 'result error';
+                result.textContent = `✗ Error: ${e.message}`;
+            }
+        }
+
+        async function testWhitelistOrigin() {
+            const result = document.getElementById('whitelistResult');
+            try {
+                const origin = window.location.origin;
+                const response = await sendToSW({ 
+                    type: 'ADD_TO_WHITELIST', 
+                    origin: origin 
+                });
+                if (response && response.ok) {
+                    result.className = 'result success';
+                    result.textContent = `✓ Origin whitelisted: ${origin}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `✗ Failed to whitelist origin: ${JSON.stringify(response)}`;
+                }
+            } catch (e) {
+                result.className = 'result error';
+                result.textContent = `✗ Error: ${e.message}`;
+            }
+        }
+
+        async function testWhitelistPath() {
+            const result = document.getElementById('pathResult');
+            try {
+                const path = window.location.origin + window.location.pathname;
+                const response = await sendToSW({ 
+                    type: 'ADD_TO_WHITELIST_PATHS', 
+                    path: path 
+                });
+                if (response && response.ok) {
+                    result.className = 'result success';
+                    result.textContent = `✓ Path whitelisted: ${path}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `✗ Failed to whitelist path: ${JSON.stringify(response)}`;
+                }
+            } catch (e) {
+                result.className = 'result error';
+                result.textContent = `✗ Error: ${e.message}`;
+            }
+        }
+
+        async function checkWhitelistStatus() {
+            const result = document.getElementById('statusResult');
+            try {
+                const config = await sendToSW({ type: 'GET_CONFIG' });
+                if (config && config.ok) {
+                    const cfg = config.config;
+                    const tabId = (await sendToSW({ type: 'GET_TAB_ID' }))?.tabId;
+                    
+                    let status = [];
+                    if (cfg.tabWhitelist && cfg.tabWhitelist[tabId]) {
+                        status.push(`Tab origins: ${cfg.tabWhitelist[tabId].join(', ')}`);
+                    }
+                    if (cfg.tabWhitelistPaths && cfg.tabWhitelistPaths[tabId]) {
+                        status.push(`Tab paths: ${cfg.tabWhitelistPaths[tabId].join(', ')}`);
+                    }
+                    
+                    if (status.length > 0) {
+                        result.className = 'result success';
+                        result.textContent = `✓ Tab ${tabId} whitelist status:\n${status.join('\n')}`;
+                    } else {
+                        result.className = 'result';
+                        result.textContent = `Tab ${tabId} has no specific whitelist entries`;
+                    }
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `✗ Failed to get config: ${JSON.stringify(config)}`;
+                }
+            } catch (e) {
+                result.className = 'result error';
+                result.textContent = `✗ Error: ${e.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

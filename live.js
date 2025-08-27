@@ -40,7 +40,18 @@
     const urlRaw = String(entry.url||'');
     let url = urlRaw;
     try { url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); } catch {}
-    u.textContent = url;
+    let displayText = url;
+    
+    try {
+      const urlObj = new URL(url);
+      const domain = urlObj.hostname.replace(/^www\./, '');
+      const path = urlObj.pathname === '/' ? '' : urlObj.pathname;
+      displayText = domain + path;
+    } catch (e) {
+      displayText = url.replace(/^https?:\/\//, '').split('?')[0];
+    }
+    
+    u.textContent = displayText;
     u.title = url;
     u.style.whiteSpace = 'nowrap'; u.style.overflow = 'hidden'; u.style.textOverflow = 'ellipsis';
     tr.appendChild(u);
@@ -50,23 +61,24 @@
     rule.textContent = `${type}${action?(' / '+action):''}`;
     tr.appendChild(rule);
     const act = document.createElement('td');
-    const bDom = document.createElement('button'); bDom.textContent = 'Blacklist domain'; bDom.className='secondary';
-    const bPath = document.createElement('button'); bPath.textContent = 'Blacklist path'; bPath.className='secondary'; bPath.style.marginLeft='6px';
-    bDom.addEventListener('click', async ()=>{
-      const orig = originOf(url); if (!orig) return;
+    const allowPattern = document.createElement('button'); allowPattern.textContent = 'Allow pattern'; allowPattern.className='secondary';
+    const blockPattern = document.createElement('button'); blockPattern.textContent = 'Block pattern'; blockPattern.className='secondary'; blockPattern.style.marginLeft='6px';
+    
+    allowPattern.addEventListener('click', async ()=>{
+      const key = pathKeyOf(url); if (!key) return;
       try {
-        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST', origin: orig });
-        if (res && res.ok){ bDom.textContent = 'Blacklisted'; bDom.disabled = true; setStatus('Domain added to blacklist.'); }
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: key });
+        if (res && res.ok){ allowPattern.textContent = 'Allowed'; allowPattern.disabled = true; setStatus('Pattern added to allow list.'); }
       } catch {}
     });
-    bPath.addEventListener('click', async ()=>{
+    blockPattern.addEventListener('click', async ()=>{
       const key = pathKeyOf(url); if (!key) return;
       try {
         const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATHS', path: key });
-        if (res && res.ok){ bPath.textContent = 'Blacklisted'; bPath.disabled = true; setStatus('Path added to blacklist.'); }
+        if (res && res.ok){ blockPattern.textContent = 'Blocked'; blockPattern.disabled = true; setStatus('Pattern added to block list.'); }
       } catch {}
     });
-    act.appendChild(bDom); act.appendChild(bPath); tr.appendChild(act);
+    act.appendChild(allowPattern); act.appendChild(blockPattern); tr.appendChild(act);
     return tr;
   }
 

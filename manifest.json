@@ -53,6 +53,7 @@
     {
       "resources": [
         "injector.js",
+        "schemas/adultPersona.js",
         "204.html"
       ],
       "matches": ["<all_urls>"]

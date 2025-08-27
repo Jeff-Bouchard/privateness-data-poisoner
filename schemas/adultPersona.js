@@ -22,14 +22,16 @@ function xorshift32(seed) {
   };
 }
 
-function seededRandForOrigin(origin) {
+function seededRandForOrigin(origin, masterPassword = '') {
   try {
     const u = new URL(origin, location.href);
     const base = u.hostname || origin || 'default';
-    const seed = seedFromHost(base + '::privateness');
+    const seedInput = masterPassword ? `${masterPassword}::${base}::privateness` : `${base}::privateness`;
+    const seed = seedFromHost(seedInput);
     return xorshift32(seed);
   } catch (e) {
-    return xorshift32(seedFromHost(String(origin || 'default')));
+    const seedInput = masterPassword ? `${masterPassword}::${String(origin || 'default')}` : String(origin || 'default');
+    return xorshift32(seedFromHost(seedInput));
   }
 }
 
@@ -166,7 +168,7 @@ function mutateFB(u, init, rand, persona) {
 }
 
 function isTikTokHost(host) { return /(^|\.)tiktok\.com$|(^|\.)ttwstatic\.com$/.test(host); }
-function isTikTokPixelPath(path) { return /\/i18n\/pixel\//.test(path) || /\/api\/track\/.test(path); }
+function isTikTokPixelPath(path) { return /\/i18n\/pixel\//.test(path) || /\/api\/track\//.test(path); }
 function mutateTikTok(u, init, rand, persona) {
   try {
     const url = new URL(u, location.href);
@@ -202,8 +204,8 @@ const SCHEMAS = [
   {
     name: 'youtube_qoe',
     test: (urlStr) => { try { const u = new URL(urlStr, location.href); return isYouTubeHost(u.hostname) && isYouTubeQoEPath(u.pathname); } catch { return false; } },
-    mutate: (urlStr, init, origin) => {
-      const rand = seededRandForOrigin(origin);
+    mutate: (urlStr, init, origin, masterPassword = '') => {
+      const rand = seededRandForOrigin(origin, masterPassword);
       const persona = buildPersona(rand);
       return mutateYouTubeQoE(urlStr, init, rand, persona);
     }
@@ -211,8 +213,8 @@ const SCHEMAS = [
   {
     name: 'facebook_pixel',
     test: (urlStr) => { try { const u = new URL(urlStr, location.href); return isFacebookHost(u.hostname) && isFBPixelPath(u.pathname); } catch { return false; } },
-    mutate: (urlStr, init, origin) => {
-      const rand = seededRandForOrigin(origin);
+    mutate: (urlStr, init, origin, masterPassword = '') => {
+      const rand = seededRandForOrigin(origin, masterPassword);
       const persona = buildPersona(rand);
       return mutateFB(urlStr, init, rand, persona);
     }
@@ -220,8 +222,8 @@ const SCHEMAS = [
   {
     name: 'tiktok_pixel',
     test: (urlStr) => { try { const u = new URL(urlStr, location.href); return isTikTokHost(u.hostname) && isTikTokPixelPath(u.pathname); } catch { return false; } },
-    mutate: (urlStr, init, origin) => {
-      const rand = seededRandForOrigin(origin);
+    mutate: (urlStr, init, origin, masterPassword = '') => {
+      const rand = seededRandForOrigin(origin, masterPassword);
       const persona = buildPersona(rand);
       return mutateTikTok(urlStr, init, rand, persona);
     }
@@ -229,8 +231,8 @@ const SCHEMAS = [
   {
     name: 'generic_analytics',
     test: (urlStr) => { try { const u = new URL(urlStr, location.href); return isGenericAnalyticsHost(u.hostname); } catch { return false; } },
-    mutate: (urlStr, init, origin) => {
-      const rand = seededRandForOrigin(origin);
+    mutate: (urlStr, init, origin, masterPassword = '') => {
+      const rand = seededRandForOrigin(origin, masterPassword);
       const persona = buildPersona(rand);
       return mutateGenericAnalytics(urlStr, init, rand, persona);
     }

@@ -43,6 +43,117 @@ function openLiveLogTab(){
   } catch {}
 }
 
+// Master password management
+async function saveMasterPassword() {
+  const input = document.getElementById('masterPasswordInput');
+  const password = input.value.trim();
+  
+  try {
+    await chrome.storage.local.set({ masterPassword: password });
+    showStatus('Master password saved', 'success');
+    input.value = '';
+  } catch (e) {
+    showStatus('Failed to save master password', 'error');
+  }
+}
+
+async function clearMasterPassword() {
+  try {
+    await chrome.storage.local.remove('masterPassword');
+    showStatus('Master password cleared', 'success');
+    document.getElementById('masterPasswordInput').value = '';
+  } catch (e) {
+    showStatus('Failed to clear master password', 'error');
+  }
+}
+
+// Logging functions
+function exportLogs() {
+  try {
+    const exported = poisoningLogger.exportLogs();
+    const blob = new Blob([exported], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `privateness-logs-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('Logs exported successfully', 'success');
+  } catch (e) {
+    showStatus('Failed to export logs', 'error');
+  }
+}
+
+function importLogs() {
+  document.getElementById('importFile').click();
+}
+
+function handleLogImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const result = poisoningLogger.importLogs(e.target.result);
+      if (result.success) {
+        showStatus(`Imported ${result.count} log entries`, 'success');
+        updateLogStats();
+      } else {
+        showStatus(`Import failed: ${result.error}`, 'error');
+      }
+    } catch (err) {
+      showStatus('Import failed: Invalid file', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function clearLogs() {
+  if (confirm('Clear all poisoning logs? This cannot be undone.')) {
+    poisoningLogger.clearLogs();
+    showStatus('All logs cleared', 'success');
+    updateLogStats();
+  }
+}
+
+function updateLogStats() {
+  const stats = poisoningLogger.getStats();
+  const statsDiv = document.getElementById('logStats');
+  
+  if (stats.totalEntries === 0) {
+    statsDiv.textContent = 'No logs recorded yet';
+    return;
+  }
+  
+  const schemas = Object.entries(stats.schemaBreakdown)
+    .map(([name, count]) => `${name}: ${count}`)
+    .join(', ');
+    
+  statsDiv.textContent = '';
+  const entriesSpan = document.createElement('strong');
+  entriesSpan.textContent = stats.totalEntries;
+  const originsSpan = document.createElement('strong');
+  originsSpan.textContent = stats.uniqueOrigins;
+  
+  statsDiv.appendChild(entriesSpan);
+  statsDiv.appendChild(document.createTextNode(' entries, '));
+  statsDiv.appendChild(originsSpan);
+  statsDiv.appendChild(document.createTextNode(' origins'));
+  statsDiv.appendChild(document.createElement('br'));
+  statsDiv.appendChild(document.createTextNode(`Schemas: ${schemas}`));
+  
+  if (stats.timeRange) {
+    statsDiv.appendChild(document.createElement('br'));
+    statsDiv.appendChild(document.createTextNode(`Range: ${stats.timeRange.spanHours}h`));
+  }
+}
+
+function showStatus(message, type = 'info') {
+  // Simple status display - could be enhanced with a toast system
+  console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
 // Preview modal wiring
 function openPreview(text, meta){
   try {
@@ -81,10 +192,12 @@ document.getElementById('previewCopy')?.addEventListener('click', copyPreview);
 // Whitelist choice modal wiring
 let WL_TARGET_URL = '';
 let WL_ON_DONE = null;
-function openWhitelistChooser(url, onDone){
+let WL_TAB_ID = null;
+function openWhitelistChooser(url, onDone, tabId){
   try {
     WL_TARGET_URL = String(url||'');
     WL_ON_DONE = typeof onDone === 'function' ? onDone : null;
+    WL_TAB_ID = tabId || null;
     const modal = document.getElementById('wlModal');
     const meta = document.getElementById('wlMeta');
     if (meta){
@@ -94,7 +207,7 @@ function openWhitelistChooser(url, onDone){
   } catch {}
 }
 function closeWhitelistChooser(){
-  try { const modal = document.getElementById('wlModal'); if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } WL_TARGET_URL=''; WL_ON_DONE=null; } catch {}
+  try { const modal = document.getElementById('wlModal'); if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } WL_TARGET_URL=''; WL_ON_DONE=null; WL_TAB_ID=null; } catch {}
 }
 document.getElementById('wlClose')?.addEventListener('click', closeWhitelistChooser);
 document.getElementById('wlModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'wlModal') closeWhitelistChooser(); });
@@ -103,7 +216,7 @@ document.getElementById('wlDomain')?.addEventListener('click', async ()=>{
   if (!full) return;
   try {
     const u = new URL(full);
-    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST', origin: u.origin });
+    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST', origin: u.origin, tabId: WL_TAB_ID });
     if (res && res.ok){
       updateWhitelist();
       if (WL_ON_DONE) try { WL_ON_DONE(); } catch {}
@@ -118,7 +231,7 @@ document.getElementById('wlPath')?.addEventListener('click', async ()=>{
     const u = new URL(full);
     let pathKey = u.origin + u.pathname;
     if (!pathKey.endsWith('/')) pathKey += '/';
-    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: pathKey });
+    const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: pathKey, tabId: WL_TAB_ID });
     if (res && res.ok){
       updateWhitelistPaths();
       if (WL_ON_DONE) try { WL_ON_DONE(); } catch {}
@@ -250,11 +363,8 @@ async function loadConfig(){
     const on = !!cfg.auditMode;
     auditBtn.classList.toggle('on', on);
     auditBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    auditBtn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}`;
+    auditBtn.textContent = `Audit/Debug read-only mode: ${on ? 'On' : 'Off'}`;
   }
-  // Toggle visibility of Full log button based on audit mode
-  const fullLogBtn = document.getElementById('fullLog');
-  if (fullLogBtn) fullLogBtn.style.display = cfg.auditMode ? '' : 'none';
   // Threat scope button initial label
   const scopeBtn = document.getElementById('threatScope');
   if (scopeBtn) scopeBtn.textContent = `Scope: ${cfg.statsPerTab ? 'This tab' : 'Global'}`;
@@ -320,16 +430,23 @@ function renderLogs(logs){
     const r = String(l.ruleId || '');
     const isAudit = (String(l.action||'').toLowerCase()==='audit') || r.includes('(audit)');
     tr.appendChild(td(t));
-    // Column 2: URL (truncated; full on hover)
+    // Column 2: URL (show domain + path, full URL on hover)
     {
       const urlTd = document.createElement('td');
       urlTd.style.padding = '6px 8px';
-      urlTd.style.whiteSpace = 'nowrap';
-      urlTd.style.overflow = 'hidden';
-      urlTd.style.textOverflow = 'ellipsis';
       const fullUrl = l.request?.url || '';
-      const shown = (fullUrl || '').split('?')[0];
-      urlTd.textContent = shown;
+      let displayText = fullUrl;
+      
+      try {
+        const u = new URL(fullUrl);
+        const domain = u.hostname.replace(/^www\./, '');
+        const path = u.pathname === '/' ? '' : u.pathname;
+        displayText = domain + path;
+      } catch (e) {
+        displayText = fullUrl.replace(/^https?:\/\//, '').split('?')[0];
+      }
+      
+      urlTd.textContent = displayText;
       if (fullUrl) urlTd.title = fullUrl;
       tr.appendChild(urlTd);
     }
@@ -346,29 +463,39 @@ function renderLogs(logs){
       ruleTd.style.whiteSpace = 'nowrap';
       tr.appendChild(ruleTd);
     }
-    // Action buttons: Whitelist and Blacklist choices
+    // Column 4: Action buttons
     const actionTd = document.createElement('td'); actionTd.style.padding = '6px 8px';
     const wbtn = document.createElement('button');
-    wbtn.textContent = 'Whitelist…';
+    wbtn.textContent = 'Allow…';
     wbtn.style.padding = '4px 8px';
-    wbtn.title = 'Add to whitelist: choose domain or path';
+    wbtn.style.fontSize = '11px';
+    wbtn.title = 'Add to allow list: choose origin or path';
     const bbtn = document.createElement('button');
-    bbtn.textContent = 'Blacklist…';
+    bbtn.textContent = 'Block…';
     bbtn.className = 'secondary';
     bbtn.style.padding = '4px 8px';
-    bbtn.style.marginLeft = '8px';
-    bbtn.title = 'Add to blacklist: choose domain or path';
+    bbtn.style.fontSize = '11px';
+    bbtn.style.marginLeft = '6px';
+    bbtn.title = 'Add to block list: choose origin or path';
     actionTd.appendChild(wbtn);
     actionTd.appendChild(bbtn);
-    wbtn.addEventListener('click', ()=>{
+    wbtn.addEventListener('click', async ()=>{
       const full = l.request?.url || '';
       if (!full) return;
-      openWhitelistChooser(full, ()=>{ wbtn.textContent = 'Whitelisted'; wbtn.disabled = true; });
+      
+      // Get current active tab ID for bearer's authority
+      let tabId = null;
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs && tabs[0]) tabId = tabs[0].id;
+      } catch (e) {}
+      
+      openWhitelistChooser(full, ()=>{ wbtn.textContent = 'Allowed'; wbtn.disabled = true; }, tabId);
     });
     bbtn.addEventListener('click', ()=>{
       const full = l.request?.url || '';
       if (!full) return;
-      openBlacklistChooser(full, ()=>{ bbtn.textContent = 'Blacklisted'; bbtn.disabled = true; });
+      openBlacklistChooser(full, ()=>{ bbtn.textContent = 'Blocked'; bbtn.disabled = true; });
     });
     tr.appendChild(actionTd);
     body.appendChild(tr);
@@ -417,7 +544,7 @@ async function updateThreats(){
       if (auditBtn){
         const on = auditBtn.classList.contains('on');
         const total = res.threats || 0;
-        auditBtn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}${on ? ` — ${total} events` : ''}`;
+        auditBtn.textContent = `Audit/Debug read-only mode: ${on ? 'On' : 'Off'}${on ? ` — ${total} events` : ''}`;
       }
     }
   } catch {}
@@ -663,80 +790,73 @@ document.getElementById('auditToggle')?.addEventListener('click', async (e)=>{
   try {
     const stats = await chrome.runtime.sendMessage({ type: 'GET_STATS' });
     const count = (stats && stats.ok) ? (stats.threats||0) : 0;
-    btn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'} — ${count} events`;
-  } catch { btn.textContent = `Audit/Diagnostics: ${on ? 'On' : 'Off'}`; }
+    btn.textContent = `Audit/Debug read-only mode: ${on ? 'On' : 'Off'} — ${count} events`;
+  } catch { btn.textContent = `Audit/Debug read-only mode: ${on ? 'On' : 'Off'}`; }
   const res = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
   const cfg = (res && res.ok) ? res.config : {};
   await chrome.runtime.sendMessage({ type: 'SET_CONFIG', config: { ...cfg, auditMode: on } });
 });
 
-// Full log view
-async function openFullLog(){
-  try {
-    const res = await chrome.runtime.sendMessage({ type: 'GET_LOGS' });
-    const logs = (res && res.ok) ? (res.logs||[]) : [];
-    const rows = logs.map(l=>{
-      const time = timeFull(l.time);
-      const method = l.request?.method||'';
-      const url = l.request?.url||'';
-      const rule = String(l.ruleId||'');
-      const action = String(l.action||'');
-      const initiator = l.request?.initiator||'';
-      const referrer = l.referrer||'';
-      const win = l.client?.win ? 'yes' : 'no';
-      const platform = l.client?.platform||'';
-      const tz = l.client?.tz||'';
-      const lang = l.client?.lang||'';
-      return `<tr>
-        <td>${time}</td>
-        <td>${method}</td>
-        <td>${escapeHtml(url)}</td>
-        <td>${rule}</td>
-        <td>${action}</td>
-        <td>${escapeHtml(initiator)}</td>
-        <td>${escapeHtml(referrer)}</td>
-        <td>${win}</td>
-        <td>${escapeHtml(platform)}</td>
-        <td>${escapeHtml(tz)}</td>
-        <td>${escapeHtml(lang)}</td>
-      </tr>`;
-    }).join('');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privateness — Full Log</title>
-      <style>
-        :root{color-scheme:dark}
-        body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:0;padding:16px;background:#0b0f12;color:#e6ebf1}
-        h1{font-size:18px;margin:0 0 12px}
-        .muted{color:#7b8693}
-        .wrap{overflow:auto;border:1px solid #1f2630;border-radius:10px}
-        table{width:100%;border-collapse:collapse}
-        th,td{padding:8px 10px;border-bottom:1px solid #1f2630;text-align:left;font-size:12px;vertical-align:top}
-        th{color:#7b8693;position:sticky;top:0;background:#0f1418}
-      </style>
-    </head><body>
-      <h1>Privateness — Full Log</h1>
-      <div class="muted" style="margin-bottom:10px">${logs.length} entr${logs.length===1?'y':'ies'} total. This view updates only when reopened.</div>
-      <div class="wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th><th>Method</th><th>URL</th><th>Rule</th><th>Action</th><th>Initiator</th><th>Referrer</th><th>Win</th><th>Platform</th><th>TZ</th><th>Lang</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </body></html>`;
-    const w = window.open();
-    if (w && w.document) { w.document.open(); w.document.write(html); w.document.close(); }
-  } catch {}
-}
 
 function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 }
 
-document.getElementById('fullLog')?.addEventListener('click', openFullLog);
+// Wire up new logging and master password controls
+document.getElementById('masterPasswordSave')?.addEventListener('click', saveMasterPassword);
+document.getElementById('masterPasswordClear')?.addEventListener('click', clearMasterPassword);
+document.getElementById('exportLogs')?.addEventListener('click', exportLogs);
+document.getElementById('importLogs')?.addEventListener('click', importLogs);
+document.getElementById('clearLogs')?.addEventListener('click', clearLogs);
+document.getElementById('viewLogStats')?.addEventListener('click', updateLogStats);
+document.getElementById('importFile')?.addEventListener('change', handleLogImport);
+
+// Initialize logging stats on load
+document.addEventListener('DOMContentLoaded', () => {
+  updateLogStats();
+});
+
 document.getElementById('seeAsTab')?.addEventListener('click', openLiveLogTab);
+
+// Export/Import configuration
+document.getElementById('exportConfig')?.addEventListener('click', async () => {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
+    if (res && res.ok) {
+      const config = res.config;
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `privateness-config-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  } catch (e) {
+    console.error('Export failed:', e);
+  }
+});
+
+document.getElementById('importConfig')?.addEventListener('click', () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const config = JSON.parse(text);
+      await chrome.runtime.sendMessage({ type: 'SET_CONFIG', config });
+      location.reload(); // Refresh UI to show imported config
+    } catch (e) {
+      alert('Import failed: Invalid JSON file');
+    }
+  });
+  input.click();
+});
 
 // Privacy Policy hover preview (CSP-safe; no inline script)
 document.addEventListener('DOMContentLoaded', ()=>{
