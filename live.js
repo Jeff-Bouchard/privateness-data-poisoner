@@ -32,41 +32,210 @@
   function setStatus(txt){ if(statusEl) statusEl.textContent = txt || ''; }
   function scrollToBottom(){ try { wrap.scrollTop = wrap.scrollHeight; } catch {} }
 
-  function rowFor(entry){
+  async function isWhitelisted(origin, path) {
+    try {
+      const cfg = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
+      if (cfg && cfg.config) {
+        // Check exact domain whitelist
+        if (origin) {
+          const domain = new URL(origin).hostname;
+          if (cfg.config.whitelist && cfg.config.whitelist.some(x => 
+            new URL(x).hostname === domain)) {
+            return 'domain';
+          }
+        }
+        // Check path whitelist
+        if (path) {
+          const pathKey = pathKeyOf(path);
+          if (cfg.config.whitelistPaths && cfg.config.whitelistPaths.includes(pathKey)) {
+            return 'path';
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error checking whitelist status:', e);
+    }
+    return false;
+  }
+
+  async function isBlacklisted(origin, path) {
+    try {
+      const cfg = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
+      if (cfg && cfg.config) {
+        // Check exact domain blacklist
+        if (origin) {
+          const domain = new URL(origin).hostname;
+          if (cfg.config.blacklist && cfg.config.blacklist.some(x => 
+            new URL(x).hostname === domain)) {
+            return 'domain';
+          }
+        }
+        // Check path blacklist
+        if (path) {
+          const pathKey = pathKeyOf(path);
+          if (cfg.config.blacklistPaths && cfg.config.blacklistPaths.includes(pathKey)) {
+            return 'path';
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error checking blacklist status:', e);
+    }
+    return false;
+  }
+
+  async function rowFor(entry) {
     const tr = document.createElement('tr');
-    const t = document.createElement('td'); t.textContent = timeStr(entry.ts||Date.now()); tr.appendChild(t);
+    
+    // Time column
+    const t = document.createElement('td'); 
+    t.textContent = timeStr(entry.ts || Date.now()); 
+    tr.appendChild(t);
+    
+    // URL column
     const u = document.createElement('td');
+    u.className = 'url-cell';
+    
     // Always display absolute URL (not just path). If entry.url is relative, resolve against initiator.
-    const urlRaw = String(entry.url||'');
+    const urlRaw = String(entry.url || '');
     let url = urlRaw;
-    try { url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); } catch {}
-    u.textContent = url;
+    try { 
+      url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); 
+    } catch (e) {}
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.textContent = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.style.color = '#4ea1ff';
+    link.style.textDecoration = 'none';
+    u.appendChild(link);
     u.title = url;
-    u.style.whiteSpace = 'nowrap'; u.style.overflow = 'hidden'; u.style.textOverflow = 'ellipsis';
     tr.appendChild(u);
+    
+    // Type/Rule column
     const rule = document.createElement('td');
     const type = entry.type || 'event';
     const action = entry.action || '';
-    rule.textContent = `${type}${action?(' / '+action):''}`;
+    rule.textContent = `${type}${action ? (' / ' + action) : ''}`;
     tr.appendChild(rule);
+    
+    // Actions column
     const act = document.createElement('td');
-    const bDom = document.createElement('button'); bDom.textContent = 'Blacklist domain'; bDom.className='secondary';
-    const bPath = document.createElement('button'); bPath.textContent = 'Blacklist path'; bPath.className='secondary'; bPath.style.marginLeft='6px';
-    bDom.addEventListener('click', async ()=>{
-      const orig = originOf(url); if (!orig) return;
-      try {
-        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST', origin: orig });
-        if (res && res.ok){ bDom.textContent = 'Blacklisted'; bDom.disabled = true; setStatus('Domain added to blacklist.'); }
-      } catch {}
-    });
-    bPath.addEventListener('click', async ()=>{
-      const key = pathKeyOf(url); if (!key) return;
-      try {
-        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATHS', path: key });
-        if (res && res.ok){ bPath.textContent = 'Blacklisted'; bPath.disabled = true; setStatus('Path added to blacklist.'); }
-      } catch {}
-    });
-    act.appendChild(bDom); act.appendChild(bPath); tr.appendChild(act);
+    act.className = 'action-buttons';
+    
+    // Only show action buttons for valid, non-extension URLs
+    if (url && !url.startsWith('chrome-extension://')) {
+      const origin = originOf(url);
+      const pathKey = pathKeyOf(url);
+      
+      // Check whitelist/blacklist status
+      const [isW, isB] = await Promise.all([
+        isWhitelisted(origin, url),
+        isBlacklisted(origin, url)
+      ]);
+      
+      // Whitelist Domain button
+      const wlDomBtn = document.createElement('button');
+      wlDomBtn.className = 'whitelist-btn' + (isW ? ' active' : '');
+      wlDomBtn.textContent = isW ? '✓ Whitelisted' : 'Whitelist Domain';
+      wlDomBtn.disabled = !!isW;
+      wlDomBtn.title = isW ? 'This domain is whitelisted' : 'Add domain to whitelist';
+      
+      wlDomBtn.addEventListener('click', async () => {
+        if (!origin) return;
+        try {
+          const res = await chrome.runtime.sendMessage({ 
+            type: 'ADD_TO_WHITELIST', 
+            origin: origin 
+          });
+          
+          if (res?.ok) {
+            wlDomBtn.textContent = '✓ Whitelisted';
+            wlDomBtn.disabled = true;
+            wlDomBtn.className = 'whitelist-btn active';
+            blDomBtn.disabled = false;
+            setStatus(`Whitelisted domain: ${new URL(origin).hostname}`);
+          } else {
+            setStatus(`Failed to whitelist domain: ${res?.error || 'Unknown error'}`);
+          }
+        } catch (e) {
+          setStatus('Error whitelisting domain');
+          console.error('Whitelist domain error:', e);
+        }
+      });
+      
+      // Blacklist Domain button
+      const blDomBtn = document.createElement('button');
+      blDomBtn.className = 'blacklist-btn' + (isB ? ' active' : '');
+      blDomBtn.textContent = isB ? '✓ Blocked' : 'Block Domain';
+      blDomBtn.disabled = !!isB;
+      blDomBtn.title = isB ? 'This domain is blocked' : 'Add domain to blacklist';
+      
+      blDomBtn.addEventListener('click', async () => {
+        if (!origin) return;
+        try {
+          const res = await chrome.runtime.sendMessage({ 
+            type: 'ADD_TO_BLACKLIST', 
+            origin: origin 
+          });
+          
+          if (res?.ok) {
+            blDomBtn.textContent = '✓ Blocked';
+            blDomBtn.disabled = true;
+            blDomBtn.className = 'blacklist-btn active';
+            wlDomBtn.disabled = true; // Can't whitelist if blacklisted
+            setStatus(`Blocked domain: ${new URL(origin).hostname}`);
+          } else {
+            setStatus(`Failed to block domain: ${res?.error || 'Unknown error'}`);
+          }
+        } catch (e) {
+          setStatus('Error blocking domain');
+          console.error('Block domain error:', e);
+        }
+      });
+      
+      // Add buttons to container
+      act.appendChild(wlDomBtn);
+      act.appendChild(blDomBtn);
+      
+      // Add path-based whitelist if there's a meaningful path
+      if (pathKey && pathKey !== origin + '/') {
+        const wlPathBtn = document.createElement('button');
+        wlPathBtn.className = 'whitelist-path-btn' + (isW === 'path' ? ' active' : '');
+        wlPathBtn.textContent = isW === 'path' ? '✓ Path Whitelisted' : 'Whitelist Path';
+        wlPathBtn.disabled = isW === 'path' || isB === 'path';
+        wlPathBtn.title = isW === 'path' ? 'This path is whitelisted' : 
+                         isB === 'path' ? 'This path is blacklisted' :
+                         'Add exact path to whitelist';
+        
+        wlPathBtn.addEventListener('click', async () => {
+          try {
+            const res = await chrome.runtime.sendMessage({ 
+              type: 'ADD_TO_WHITELIST_PATHS', 
+              path: pathKey 
+            });
+            
+            if (res?.ok) {
+              wlPathBtn.textContent = '✓ Path Whitelisted';
+              wlPathBtn.disabled = true;
+              wlPathBtn.className = 'whitelist-path-btn active';
+              setStatus(`Whitelisted path: ${pathKey}`);
+            } else {
+              setStatus(`Failed to whitelist path: ${res?.error || 'Unknown error'}`);
+            }
+          } catch (e) {
+            setStatus('Error whitelisting path');
+            console.error('Whitelist path error:', e);
+          }
+        });
+        
+        act.appendChild(wlPathBtn);
+      }
+    }
+    
+    tr.appendChild(act);
     return tr;
   }
 
@@ -114,6 +283,69 @@
       subscribe();
     } catch (e) { setStatus('Failed to connect. Retrying…'); setTimeout(connect, 1200); }
   }
+
+  // Add styles for the live log
+  const style = document.createElement('style');
+  style.textContent = `
+    .url-cell {
+      max-width: 300px;
+      word-wrap: break-word;
+      white-space: normal !important;
+      overflow-wrap: break-word;
+      word-break: break-all;
+      line-height: 1.4;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 300px;
+    }
+    .action-buttons button {
+      white-space: nowrap;
+      margin: 2px 0;
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .whitelist-btn, .whitelist-path-btn {
+      background-color: #2e7d32;
+      color: white;
+      border-color: #1b5e20;
+    }
+    .whitelist-btn:hover, .whitelist-path-btn:hover {
+      background-color: #1b5e20;
+    }
+    .blacklist-btn {
+      background-color: #c62828;
+      color: white;
+      border-color: #b71c1c;
+    }
+    .blacklist-btn:hover {
+      background-color: #b71c1c;
+    }
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    button.active {
+      font-weight: bold;
+      opacity: 0.9;
+    }
+    .whitelist-path-btn {
+      background-color: #1976d2;
+      border-color: #1565c0;
+    }
+    .whitelist-path-btn:hover {
+      background-color: #1565c0;
+    }
+    .whitelist-path-btn.active {
+      background-color: #0d47a1;
+    }
+  `;
+  document.head.appendChild(style);
 
   // UI wiring
   $('playPause')?.addEventListener('click', (e)=>{
