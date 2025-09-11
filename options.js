@@ -35,13 +35,7 @@ function timeFull(ts){
   return `${yyyy}-${mon}-${day} ${hh}:${mm}:${ss}`;
 }
 
-// Open the Live log page as a browser tab
-function openLiveLogTab(){
-  try {
-    const url = chrome.runtime.getURL('live.html');
-    window.open(url, '_blank', 'noopener');
-  } catch {}
-}
+// Live log (tab) removed
 
 // Preview modal wiring
 function openPreview(text, meta){
@@ -79,27 +73,35 @@ async function copyPreview(){
 document.getElementById('previewCopy')?.addEventListener('click', copyPreview);
 
 // Whitelist choice modal wiring
-let WL_TARGET_URL = '';
+let WL_REQ_URL = '';
+let WL_INIT_URL = '';
 let WL_ON_DONE = null;
-function openWhitelistChooser(url, onDone){
+function openWhitelistChooser(requestUrl, initiatorUrl, onDone){
   try {
-    WL_TARGET_URL = String(url||'');
+    WL_REQ_URL = String(requestUrl||'');
+    WL_INIT_URL = String(initiatorUrl||'');
     WL_ON_DONE = typeof onDone === 'function' ? onDone : null;
     const modal = document.getElementById('wlModal');
     const meta = document.getElementById('wlMeta');
     if (meta){
-      try { const u = new URL(WL_TARGET_URL); meta.textContent = `${u.origin}${u.pathname}`; } catch { meta.textContent = WL_TARGET_URL; }
+      const shown = WL_REQ_URL || WL_INIT_URL;
+      try { const u = new URL(shown); meta.textContent = `${u.origin}${u.pathname}`; } catch { meta.textContent = shown; }
     }
     if (modal){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); }
   } catch {}
 }
 function closeWhitelistChooser(){
-  try { const modal = document.getElementById('wlModal'); if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } WL_TARGET_URL=''; WL_ON_DONE=null; } catch {}
+  try {
+    const modal = document.getElementById('wlModal');
+    if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+    WL_REQ_URL=''; WL_INIT_URL=''; WL_ON_DONE=null;
+  } catch {}
 }
 document.getElementById('wlClose')?.addEventListener('click', closeWhitelistChooser);
 document.getElementById('wlModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'wlModal') closeWhitelistChooser(); });
 document.getElementById('wlDomain')?.addEventListener('click', async ()=>{
-  const full = WL_TARGET_URL;
+  // Domain allow: use initiator origin (site), fallback to request origin
+  const full = WL_INIT_URL || WL_REQ_URL;
   if (!full) return;
   try {
     const u = new URL(full);
@@ -112,7 +114,8 @@ document.getElementById('wlDomain')?.addEventListener('click', async ()=>{
   closeWhitelistChooser();
 });
 document.getElementById('wlPath')?.addEventListener('click', async ()=>{
-  const full = WL_TARGET_URL;
+  // Path allow: use request URL origin+pathname
+  const full = WL_REQ_URL;
   if (!full) return;
   try {
     const u = new URL(full);
@@ -128,27 +131,35 @@ document.getElementById('wlPath')?.addEventListener('click', async ()=>{
 });
 
 // Blacklist choice modal wiring
-let BL_TARGET_URL = '';
+let BL_REQ_URL = '';
+let BL_INIT_URL = '';
 let BL_ON_DONE = null;
-function openBlacklistChooser(url, onDone){
+function openBlacklistChooser(requestUrl, initiatorUrl, onDone){
   try {
-    BL_TARGET_URL = String(url||'');
+    BL_REQ_URL = String(requestUrl||'');
+    BL_INIT_URL = String(initiatorUrl||'');
     BL_ON_DONE = typeof onDone === 'function' ? onDone : null;
     const modal = document.getElementById('blModal');
     const meta = document.getElementById('blMeta');
     if (meta){
-      try { const u = new URL(BL_TARGET_URL); meta.textContent = `${u.origin}${u.pathname}`; } catch { meta.textContent = BL_TARGET_URL; }
+      const shown = BL_REQ_URL || BL_INIT_URL;
+      try { const u = new URL(shown); meta.textContent = `${u.origin}${u.pathname}`; } catch { meta.textContent = shown; }
     }
     if (modal){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); }
   } catch {}
 }
 function closeBlacklistChooser(){
-  try { const modal = document.getElementById('blModal'); if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } BL_TARGET_URL=''; BL_ON_DONE=null; } catch {}
+  try {
+    const modal = document.getElementById('blModal');
+    if (modal){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+    BL_REQ_URL=''; BL_INIT_URL=''; BL_ON_DONE=null;
+  } catch {}
 }
 document.getElementById('blClose')?.addEventListener('click', closeBlacklistChooser);
 document.getElementById('blModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'blModal') closeBlacklistChooser(); });
 document.getElementById('blDomain')?.addEventListener('click', async ()=>{
-  const full = BL_TARGET_URL;
+  // Domain block: use initiator origin (site), fallback to request origin
+  const full = BL_INIT_URL || BL_REQ_URL;
   if (!full) return;
   try {
     const u = new URL(full);
@@ -161,7 +172,8 @@ document.getElementById('blDomain')?.addEventListener('click', async ()=>{
   closeBlacklistChooser();
 });
 document.getElementById('blPath')?.addEventListener('click', async ()=>{
-  const full = BL_TARGET_URL;
+  // Path block: use request URL origin+pathname
+  const full = BL_REQ_URL;
   if (!full) return;
   try {
     const u = new URL(full);
@@ -259,7 +271,7 @@ async function loadConfig(){
   const scopeBtn = document.getElementById('threatScope');
   if (scopeBtn) scopeBtn.textContent = `Scope: ${cfg.statsPerTab ? 'This tab' : 'Global'}`;
   // Poisoning config (beta)
-  const pc = mods.poisonConfig || {};
+  const pc = (cfg.modules && cfg.modules.poisonConfig) || {};
   const pcIds = ['poisonIncludeRid','poisonIncludeJitter','poisonIncludeFakePII'];
   pcIds.forEach((id)=>{ const el = document.getElementById(id); if (el) el.checked = (pc[id] !== false); });
   // Custom defunct names list
@@ -361,14 +373,16 @@ function renderLogs(logs){
     actionTd.appendChild(wbtn);
     actionTd.appendChild(bbtn);
     wbtn.addEventListener('click', ()=>{
-      const full = l.request?.url || '';
-      if (!full) return;
-      openWhitelistChooser(full, ()=>{ wbtn.textContent = 'Whitelisted'; wbtn.disabled = true; });
+      const reqUrl = l.request?.url || '';
+      const initUrl = l.request?.initiator || '';
+      if (!reqUrl && !initUrl) return;
+      openWhitelistChooser(reqUrl, initUrl, ()=>{ wbtn.textContent = 'Whitelisted'; wbtn.disabled = true; });
     });
     bbtn.addEventListener('click', ()=>{
-      const full = l.request?.url || '';
-      if (!full) return;
-      openBlacklistChooser(full, ()=>{ bbtn.textContent = 'Blacklisted'; bbtn.disabled = true; });
+      const reqUrl = l.request?.url || '';
+      const initUrl = l.request?.initiator || '';
+      if (!reqUrl && !initUrl) return;
+      openBlacklistChooser(reqUrl, initUrl, ()=>{ bbtn.textContent = 'Blacklisted'; bbtn.disabled = true; });
     });
     tr.appendChild(actionTd);
     body.appendChild(tr);
@@ -385,7 +399,7 @@ async function updateLogs(){
       if (res && res.ok) renderLogs(res.logs || []);
     } else {
       const res = await chrome.runtime.sendMessage({ type: 'GET_RECENT' });
-      if (res && res.ok) renderLogs((res.logs || []).slice(-5));
+      if (res && res.ok) renderLogs((res.logs || []).slice(-100));
     }
   } catch {}
 }
@@ -736,7 +750,6 @@ function escapeHtml(s){
 }
 
 document.getElementById('fullLog')?.addEventListener('click', openFullLog);
-document.getElementById('seeAsTab')?.addEventListener('click', openLiveLogTab);
 
 // Privacy Policy hover preview (CSP-safe; no inline script)
 document.addEventListener('DOMContentLoaded', ()=>{

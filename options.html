@@ -318,7 +318,8 @@
             background: #0f1418;
         }
         .scroll-5 { max-height: 260px; }
-        .scroll-10 { max-height: 520px; }
+        /* Threats log uses viewport height so other sections remain visible */
+        .scroll-10 { max-height: 40vh; }
 
         /* Tables and wraps */
         .table-wrap { 
@@ -421,7 +422,6 @@
                 <button id="threatScope" class="secondary" title="Toggle threats scope (Global / This tab)" style="padding:6px 10px">Scope: Global</button>
                 <button id="resetThreats" class="secondary" title="Reset counter and erase logs (threat traces)" style="padding:6px 10px">Reset</button>
                 <button id="fullLog" title="Open persisted audit log" style="padding:6px 10px">Full audit log</button>
-                <button id="seeAsTab" class="secondary" title="Open Live log in a new tab" style="padding:6px 10px">Live log (tab)</button>
             </div>
             <div class="small hint">Reset sets the counter back to 0 and clears persisted logs and recent in-memory events.</div>
             <div class="row" id="logsEmpty" class="small" style="color:var(--muted)">No threats yet.</div>

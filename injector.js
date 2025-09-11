@@ -35,6 +35,8 @@
   let WHITELIST_PATHS = Array.isArray(CFG.whitelistPaths) ? CFG.whitelistPaths : [];
   let BLACKLIST = Array.isArray(CFG.blacklist) ? CFG.blacklist : [];
   let BLACKLIST_PATHS = Array.isArray(CFG.blacklistPaths) ? CFG.blacklistPaths : [];
+  // Track whether the current page itself is whitelisted (domain or path)
+  let PAGE_WHITELISTED = false;
   // Custom defunct names from config (for brand/company/org replacement)
   let DEFUNCT_CUSTOM = [];
   try { const arr = CFG?.modules?.poisonConfig?.defunctNames; if (Array.isArray(arr)) DEFUNCT_CUSTOM = arr.filter(x=>typeof x==='string' && x.trim()).map(x=>x.trim()); } catch {}
@@ -91,6 +93,40 @@
           if (reqDir.startsWith(keyDir)) return true;
         } catch {}
       }
+      return false;
+    } catch { return false; }
+  }
+
+  // Determine if the current page (location) is whitelisted by origin or path
+  function pageIsWhitelisted(){
+    try {
+      const href = location.href;
+      // Origin-level check: compare base domain of page vs whitelist entries
+      try {
+        const u = new URL(href);
+        for (const entry of WHITELIST){
+          try {
+            const e = new URL(entry, location.href);
+            if (sameBase(u.hostname, e.hostname)) return true;
+          } catch {}
+        }
+      } catch {}
+      // Path-level check: require exact host and prefix match
+      try {
+        const u = new URL(href);
+        const reqKey = normalizePathKey(u.toString());
+        for (const entry of WHITELIST_PATHS){
+          try {
+            const e = new URL(normalizePathKey(entry), location.href);
+            if (u.hostname !== e.hostname) continue;
+            const key = e.origin + e.pathname;
+            const reqDir = reqKey.endsWith('/') ? reqKey : (reqKey + '/');
+            const keyDir = key.endsWith('/') ? key : (key + '/');
+            if (reqKey === key || (reqKey + '/') === keyDir || (key + '/') === reqDir) return true;
+            if (reqDir.startsWith(keyDir)) return true;
+          } catch {}
+        }
+      } catch {}
       return false;
     } catch { return false; }
   }
@@ -156,6 +192,8 @@
   }
   function shouldPoison(url){
     if (!ENABLED) return false;
+    // If the current page is whitelisted, skip poisoning entirely
+    if (PAGE_WHITELISTED) return false;
     return isMatch(url);
   }
 
@@ -182,9 +220,14 @@
       BLACKLIST = Array.isArray(CFG.blacklist) ? CFG.blacklist : [];
       BLACKLIST_PATHS = Array.isArray(CFG.blacklistPaths) ? CFG.blacklistPaths : [];
       YT_TELEMETRY_NOISE = (MODE === 'strict');
+      // Recompute page whitelist status on config updates
+      PAGE_WHITELISTED = pageIsWhitelisted();
     } catch {}
   }
   try { window.addEventListener('__MAX_POISE_CFG_UPDATE', (ev)=>{ try { applyCfg(ev && ev.detail && ev.detail.cfg); } catch {} }); } catch {}
+
+  // Compute initial page whitelist status
+  try { PAGE_WHITELISTED = pageIsWhitelisted(); } catch { PAGE_WHITELISTED = false; }
 
   // === Schema-aware mutators (non-YouTube) ===
   function seededRandForHost(host){
@@ -691,25 +734,53 @@
       const base = { event: 'heartbeat', ts, meta: { locale: 'en-US', tz: 'UTC' } };
       if (incRid) base.rid = rid;
       if (incJit) base.jitter = Math.floor(rand()*1000);
+      
       if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
         const params = new URLSearchParams(typeof data === 'string' ? data : '');
         params.set('e', base.event);
         if (incRid) params.set('rid', rid);
         params.set('ts', String(ts));
         if (incJit) params.set('j', String(base.jitter));
+        if (incPII) {
+          params.set('email', fakeEmail());
+          params.set('name', fakeName());
+          params.set('phone', fakePhone());
+        }
         return params.toString();
       }
-      // JSON-ish
+      
+      // JSON-ish - always generate a meaningful payload even if data is empty
       let obj = {};
-      if (typeof data === 'string') { try { obj = JSON.parse(data); } catch { obj = {}; } }
-      else if (data && typeof data === 'object') { try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; } }
+      if (typeof data === 'string' && data.trim()) { 
+        try { obj = JSON.parse(data); } catch { obj = {}; } 
+      } else if (data && typeof data === 'object') { 
+        try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; } 
+      }
+      
       const merged = { ...obj, ...base };
       if (incPII) {
         // add clearly synthetic hints only when enabled
         merged.pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
       }
+      
+      // Add some synthetic analytics data to make the payload more realistic
+      merged.analytics = {
+        session_id: fakeUUID(),
+        page_view: Math.floor(rand() * 100),
+        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        screen_resolution: '1920x1080',
+        viewport: '1366x768'
+      };
+      
       return JSON.stringify(merged);
-    } catch { return data; }
+    } catch { 
+      // Fallback: return a minimal poison payload
+      return JSON.stringify({ 
+        event: 'heartbeat', 
+        ts: Date.now(), 
+        rid: Math.floor(Math.random()*1e9).toString(36) 
+      }); 
+    }
   }
 
   function extractContentType(headers){

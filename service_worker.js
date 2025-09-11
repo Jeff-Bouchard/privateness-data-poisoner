@@ -189,7 +189,7 @@ function normalizeOriginToBase(origin){
 // Build and sync DNR dynamic block rules from blacklist and blacklistPaths
 function buildBlockRulesFromConfig(cfg) {
   const rules = [];
-  let idBase = 910000; // distinct reserved range from allow rules
+  let idBase = 1300000000; // distinct high range from allow rules and static rules
   
   // Track added rules to prevent duplicates
   const addedRules = new Set();
@@ -261,19 +261,24 @@ async function syncDnrBlacklist(cfg) {
   try {
     if (!chrome.declarativeNetRequest?.updateDynamicRules) return;
     
-    // Get current rules to remove
+    // Get current rules to remove (stored + any existing in our reserved block ranges)
     const { dnr_block_rule_ids = [] } = await chrome.storage.local.get('dnr_block_rule_ids');
-    const removeRuleIds = Array.isArray(dnr_block_rule_ids) ? dnr_block_rule_ids : [];
+    const storedIds = Array.isArray(dnr_block_rule_ids) ? dnr_block_rule_ids : [];
+    let existingIdsInRange = [];
+    try {
+      const existing = await chrome.declarativeNetRequest.getDynamicRules();
+      const ids = Array.isArray(existing) ? existing.map(r => r.id) : [];
+      // Legacy block range: 910000-919999; Current block range: 1300000000-1399999999
+      existingIdsInRange = ids.filter(id => (id >= 910000 && id <= 919999) || (id >= 1300000000 && id <= 1399999999));
+    } catch {}
+    const removeRuleIds = Array.from(new Set([...storedIds, ...existingIdsInRange]));
     
     // Generate new rules
     const addRules = buildBlockRulesFromConfig(cfg);
     
     // Update rules in a single batch
     if (removeRuleIds.length > 0 || addRules.length > 0) {
-      await chrome.declarativeNetRequest.updateDynamicRules({ 
-        removeRuleIds, 
-        addRules 
-      });
+      await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
       
       // Only update storage if the operation was successful
       await chrome.storage.local.set({ 
@@ -297,7 +302,7 @@ function normalizePathKey(input){
 }
 function buildAllowRulesFromConfig(cfg) {
   const rules = [];
-  let idBase = 900000; // our reserved ID range
+  let idBase = 1200000000; // high reserved ID range for allow rules
   
   // Higher priority for more specific rules (paths first, then domains, then initiators)
   const addRule = (rule, isPathRule = false, isInitiatorRule = false) => { 
@@ -316,28 +321,28 @@ function buildAllowRulesFromConfig(cfg) {
       const u = new URL(key);
       const host = escapeRegex(u.hostname);
       const pathEsc = escapeRegex(u.pathname);
-      // Match exact path or subpaths, but not parent paths
-      const rx = `^https?:\\/\\/${host}${pathEsc}(?:\/[^?#]*)?(?:[?#].*)?$`;
+      // Use urlFilter with origin+pathname prefix; this avoids complex regex limits
+      const urlFilter = `${u.origin}${u.pathname}`;
       addRule({ 
         action: { type: 'allow' }, 
-        condition: { regexFilter: rx } 
+        condition: { urlFilter } 
       }, true);
     } catch (e) {
       console.error('Error processing whitelist path:', pathKey, e);
     }
   }
 
-  // Origin-based allow: allow entire origin when in cfg.whitelist
+  // Origin-based allow: allow base domain + subdomains via urlFilter substring (best-effort)
   for (const origin of (cfg.whitelist || [])) {
     try {
       const u = new URL(origin);
       const base = getBaseDomain(u.hostname);
-      const host = escapeRegex(base);
-      // Match any subdomain of the base domain
-      const rx = `^https?:\\/\\/([^/]+\\.)*${host}(?:[:/].*)?$`;
+      // urlFilter is a substring; keep it conservative to reduce false matches
+      // Include protocol separator to anchor reasonably
+      const urlFilter = `://${base}/`;
       addRule({ 
         action: { type: 'allow' }, 
-        condition: { regexFilter: rx } 
+        condition: { urlFilter } 
       }, false);
     } catch (e) {
       console.error('Error processing whitelist origin:', origin, e);
@@ -348,9 +353,10 @@ function buildAllowRulesFromConfig(cfg) {
     try {
       const h = String(host || '').trim().toLowerCase();
       if (!h) continue;
+      // For allowAllRequests, Chromium requires resourceTypes, and only allows main_frame and sub_frame
       addRule({ 
         action: { type: 'allowAllRequests' }, 
-        condition: { initiatorDomains: [h] } 
+        condition: { initiatorDomains: [h], resourceTypes: ['main_frame','sub_frame'] } 
       }, false, true);
     } catch (e) {
       console.error('Error processing whitelist initiator host:', host, e);
@@ -362,9 +368,17 @@ async function syncDnrAllowlist(cfg) {
   try {
     if (!chrome.declarativeNetRequest?.updateDynamicRules) return;
     
-    // Get current rules to remove
+    // Get current rules to remove (stored + any existing in our reserved allow ranges)
     const { dnr_allow_rule_ids = [] } = await chrome.storage.local.get('dnr_allow_rule_ids');
-    const removeRuleIds = Array.isArray(dnr_allow_rule_ids) ? dnr_allow_rule_ids : [];
+    const storedIds = Array.isArray(dnr_allow_rule_ids) ? dnr_allow_rule_ids : [];
+    let existingIdsInRange = [];
+    try {
+      const existing = await chrome.declarativeNetRequest.getDynamicRules();
+      const ids = Array.isArray(existing) ? existing.map(r => r.id) : [];
+      // Legacy allow range: 900000-909999; Current allow range: 1200000000-1299999999
+      existingIdsInRange = ids.filter(id => (id >= 900000 && id <= 909999) || (id >= 1200000000 && id <= 1299999999));
+    } catch {}
+    const removeRuleIds = Array.from(new Set([...storedIds, ...existingIdsInRange]));
     
     // Generate new rules
     const addRules = buildAllowRulesFromConfig(cfg);
@@ -513,6 +527,16 @@ try {
       await setTabThreats({});
     } catch {}
     try { await updateBadge(); } catch {}
+  });
+} catch {}
+
+// Open options page maximized in a tab when the toolbar icon is clicked
+try {
+  chrome.action.onClicked.addListener(async () => {
+    try {
+      const url = chrome.runtime.getURL('options.html');
+      await chrome.tabs.create({ url });
+    } catch {}
   });
 } catch {}
 
@@ -741,9 +765,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Return persisted recent events if available; fallback to in-memory
       try {
         const { recent_events = [] } = await chrome.storage.local.get(RECENT_KEY);
-        sendResponse({ ok: true, logs: (Array.isArray(recent_events) ? recent_events : []).slice(-5) });
+        sendResponse({ ok: true, logs: (Array.isArray(recent_events) ? recent_events : []).slice(-100) });
       } catch {
-        sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-5) });
+        sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-100) });
       }
       return;
     }

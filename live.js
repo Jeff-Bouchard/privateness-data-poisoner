@@ -241,17 +241,17 @@
 
   function clearView(){ if (tbody) tbody.innerHTML = ''; }
 
-  function renderSnapshot(items){
+  async function renderSnapshot(items){
     if (!tbody) return;
     clearView();
     const list = Array.isArray(items) ? items : [];
-    for (const e of list){ tbody.appendChild(rowFor(e)); }
+    for (const e of list){ tbody.appendChild(await rowFor(e)); }
     if (playing) scrollToBottom();
   }
 
-  function appendEvent(e){
+  async function appendEvent(e){
     if (!tbody || !playing) return;
-    tbody.appendChild(rowFor(e));
+    tbody.appendChild(await rowFor(e));
     scrollToBottom();
   }
 
@@ -361,7 +361,8 @@
       scope = 'global';
       tabId = null;
     }
-    e.currentTarget.textContent = `Scope: ${scope === 'global' ? 'Global' : 'This tab'}`;
+    const btn = (e && e.currentTarget) || $('scope');
+    if (btn) btn.textContent = `Scope: ${scope === 'global' ? 'Global' : 'This tab'}`;
     subscribe();
   });
   $('buf')?.addEventListener('change', (e)=>{
