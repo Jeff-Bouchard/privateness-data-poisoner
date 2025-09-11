@@ -189,44 +189,109 @@ function normalizeOriginToBase(origin){
 }
 
 // Build and sync DNR dynamic block rules from blacklist and blacklistPaths
-function buildBlockRulesFromConfig(cfg){
+function buildBlockRulesFromConfig(cfg) {
   const rules = [];
-  let idBase = 910000; // distinct reserved range from allow rules
-  const addRule = (rule) => { rule.id = idBase++; rule.priority = 3000; rules.push(rule); };
-  // Origin-based block (base domain + any subdomain)
-  for (const origin of (cfg.blacklist||[])){
-    try {
-      const u = new URL(origin);
-      const base = getBaseDomain(u.hostname);
-      const host = escapeRegex(base);
-      const rx = `^https?:\\/\\/([^/]+\\.)*${host}(?:[:/].*)?$`;
-      addRule({ action: { type: 'block' }, condition: { regexFilter: rx } });
-    } catch {}
-  }
-  // Path-based block (exact host; no subdomain widening). Matches exact path or subpaths.
-  for (const pathKey of (cfg.blacklistPaths||[])){
+  let idBase = 1300000000; // distinct high range from allow rules and static rules
+  
+  // Track added rules to prevent duplicates
+  const addedRules = new Set();
+  
+  // Higher priority for more specific rules (paths first, then domains)
+  const addRule = (rule, isPathRule = false) => { 
+    const ruleKey = JSON.stringify(rule.condition);
+    if (addedRules.has(ruleKey)) return; // Skip duplicate rules
+    
+    rule.id = idBase++;
+    // Set priority: path rules (3200) > domain rules (3100)
+    rule.priority = isPathRule ? 3200 : 3100;
+    rules.push(rule);
+    addedRules.add(ruleKey);
+  };
+
+  // Path-based block (exact host; no subdomain widening)
+  for (const pathKey of (cfg.blacklistPaths || [])) {
     try {
       const key = normalizePathKey(pathKey);
       const u = new URL(key);
       const host = escapeRegex(u.hostname);
       const pathEsc = escapeRegex(u.pathname);
-      const suffix = `(?:/(?:[^?#]*)?)?(?:[?#].*)?$`;
-      const rx = `^https?:\\/\\/${host}${pathEsc}${suffix}`;
-      addRule({ action: { type: 'block' }, condition: { regexFilter: rx } });
-    } catch {}
+      
+      // Match exact path or subpaths, but not parent paths
+      const rx = `^https?:\\/\\/${host}${pathEsc}(?:\/[^?#]*)?(?:[?#].*)?$`;
+      
+      addRule({ 
+        action: { type: 'block' }, 
+        condition: { 
+          regexFilter: rx,
+          resourceTypes: ['main_frame', 'sub_frame', 'script', 'stylesheet', 'image', 
+                         'font', 'object', 'xmlhttprequest', 'ping', 'csp_report', 
+                         'media', 'websocket', 'other']
+        }
+      }, true);
+    } catch (e) {
+      console.error('Error processing blacklist path:', pathKey, e);
+    }
+  }
+
+  // Origin-based block (base domain + any subdomain)
+  for (const origin of (cfg.blacklist || [])) {
+    try {
+      const u = new URL(origin);
+      const base = getBaseDomain(u.hostname);
+      const host = escapeRegex(base);
+      
+      // Match any subdomain of the base domain
+      const rx = `^https?:\\/\\/([^/]+\\.)*${host}(?:[:/].*)?$`;
+      
+      addRule({ 
+        action: { type: 'block' }, 
+        condition: { 
+          regexFilter: rx,
+          resourceTypes: ['main_frame', 'sub_frame', 'script', 'stylesheet', 'image', 
+                         'font', 'object', 'xmlhttprequest', 'ping', 'csp_report', 
+                         'media', 'websocket', 'other']
+        }
+      }, false);
+    } catch (e) {
+      console.error('Error processing blacklist origin:', origin, e);
+    }
   }
   return rules;
 }
-async function syncDnrBlacklist(cfg){
+
+async function syncDnrBlacklist(cfg) {
   try {
     if (!chrome.declarativeNetRequest?.updateDynamicRules) return;
-    const rules = buildBlockRulesFromConfig(cfg);
+    
+    // Get current rules to remove (stored + any existing in our reserved block ranges)
     const { dnr_block_rule_ids = [] } = await chrome.storage.local.get('dnr_block_rule_ids');
-    const removeRuleIds = Array.isArray(dnr_block_rule_ids) ? dnr_block_rule_ids : [];
-    const addRules = rules;
-    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
-    await chrome.storage.local.set({ dnr_block_rule_ids: addRules.map(r=>r.id) });
-  } catch {}
+    const storedIds = Array.isArray(dnr_block_rule_ids) ? dnr_block_rule_ids : [];
+    let existingIdsInRange = [];
+    try {
+      const existing = await chrome.declarativeNetRequest.getDynamicRules();
+      const ids = Array.isArray(existing) ? existing.map(r => r.id) : [];
+      // Legacy block range: 910000-919999; Current block range: 1300000000-1399999999
+      existingIdsInRange = ids.filter(id => (id >= 910000 && id <= 919999) || (id >= 1300000000 && id <= 1399999999));
+    } catch {}
+    const removeRuleIds = Array.from(new Set([...storedIds, ...existingIdsInRange]));
+    
+    // Generate new rules
+    const addRules = buildBlockRulesFromConfig(cfg);
+    
+    // Update rules in a single batch
+    if (removeRuleIds.length > 0 || addRules.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
+      
+      // Only update storage if the operation was successful
+      await chrome.storage.local.set({ 
+        dnr_block_rule_ids: addRules.map(r => r.id) 
+      });
+      
+      console.log(`Updated DNR block rules: ${removeRuleIds.length} removed, ${addRules.length} added`);
+    }
+  } catch (e) {
+    console.error('Error syncing DNR block rules:', e);
+  }
 }
 function hostFromOrigin(origin){ try { return new URL(origin).hostname; } catch { return ''; } }
 function normalizePathKey(input){
@@ -237,58 +302,106 @@ function normalizePathKey(input){
     return String(input||'').split('?')[0].split('#')[0];
   }
 }
-function buildAllowRulesFromConfig(cfg){
+function buildAllowRulesFromConfig(cfg) {
   const rules = [];
-  let idBase = 900000; // our reserved ID range
-  const addRule = (rule) => { rule.id = idBase++; if (typeof rule.priority !== 'number') rule.priority = 1000; rules.push(rule); };
-  // Origin-based allow: allow entire origin when in cfg.whitelist
-  for (const origin of (cfg.whitelist||[])){
-    try {
-      const u = new URL(origin);
-      const base = getBaseDomain(u.hostname);
-      const host = escapeRegex(base);
-      // Match any subdomain depth of the base host
-      const rx = `^https?:\\/\\/([^/]+\\.)*${host}(?:[:/].*)?$`;
-      // URL-allow for the whitelisted site itself
-      addRule({ action: { type: 'allow' }, condition: { regexFilter: rx }, priority: 1000 });
-    } catch {}
-  }
-  // Exact-host initiator allow: full immunity for requests initiated by these hosts
-  for (const host of (cfg.whitelistExactHosts||[])){
-    try {
-      const h = String(host||'').trim().toLowerCase();
-      if (!h) continue;
-      addRule({ action: { type: 'allowAllRequests' }, condition: { initiatorDomains: [h] }, priority: 1500 });
-    } catch {}
-  }
-  // Path-based allow (exact host; no subdomain widening). Matches exact path or subpaths.
-  for (const pathKey of (cfg.whitelistPaths||[])){
+  let idBase = 1200000000; // high reserved ID range for allow rules
+  
+  // Higher priority for more specific rules (paths first, then domains, then initiators)
+  const addRule = (rule, isPathRule = false, isInitiatorRule = false) => { 
+    rule.id = idBase++;
+    // Set priority: path rules (2200) > domain rules (2100) > initiator rules (2000) > default (1000)
+    if (isPathRule) rule.priority = 2200;
+    else if (isInitiatorRule) rule.priority = 2000;
+    else rule.priority = 2100; // domain rule
+    rules.push(rule);
+  };
+
+  // Path-based allow (exact host; no subdomain widening)
+  for (const pathKey of (cfg.whitelistPaths || [])) {
     try {
       const key = normalizePathKey(pathKey);
       const u = new URL(key);
       const host = escapeRegex(u.hostname);
       const pathEsc = escapeRegex(u.pathname);
-      // Always match exact path or any subpath that follows
-      // Examples:
-      //  - key '/api/core/v5/events' matches '/api/core/v5/events' and '/api/core/v5/events/...'
-      //  - key '/api/core/v5/events/' matches likewise
-      const suffix = `(?:/(?:[^?#]*)?)?(?:[?#].*)?$`;
-      const rx = `^https?:\\/\\/${host}${pathEsc}${suffix}`;
-      addRule({ action: { type: 'allow' }, condition: { regexFilter: rx }, priority: 1000 });
-    } catch {}
+      // Use urlFilter with origin+pathname prefix; this avoids complex regex limits
+      const urlFilter = `${u.origin}${u.pathname}`;
+      addRule({ 
+        action: { type: 'allow' }, 
+        condition: { urlFilter } 
+      }, true);
+    } catch (e) {
+      console.error('Error processing whitelist path:', pathKey, e);
+    }
+  }
+
+  // Origin-based allow: allow base domain + subdomains via urlFilter substring (best-effort)
+  for (const origin of (cfg.whitelist || [])) {
+    try {
+      const u = new URL(origin);
+      const base = getBaseDomain(u.hostname);
+      // urlFilter is a substring; keep it conservative to reduce false matches
+      // Include protocol separator to anchor reasonably
+      const urlFilter = `://${base}/`;
+      addRule({ 
+        action: { type: 'allow' }, 
+        condition: { urlFilter } 
+      }, false);
+    } catch (e) {
+      console.error('Error processing whitelist origin:', origin, e);
+    }
+  }
+  // Exact-host initiator allow: full immunity for requests initiated by these hosts
+  for (const host of (cfg.whitelistExactHosts || [])) {
+    try {
+      const h = String(host || '').trim().toLowerCase();
+      if (!h) continue;
+      // For allowAllRequests, Chromium requires resourceTypes, and only allows main_frame and sub_frame
+      addRule({ 
+        action: { type: 'allowAllRequests' }, 
+        condition: { initiatorDomains: [h], resourceTypes: ['main_frame','sub_frame'] } 
+      }, false, true);
+    } catch (e) {
+      console.error('Error processing whitelist initiator host:', host, e);
+    }
   }
   return rules;
 }
-async function syncDnrAllowlist(cfg){
+async function syncDnrAllowlist(cfg) {
   try {
     if (!chrome.declarativeNetRequest?.updateDynamicRules) return;
-    const rules = buildAllowRulesFromConfig(cfg);
+    
+    // Get current rules to remove (stored + any existing in our reserved allow ranges)
     const { dnr_allow_rule_ids = [] } = await chrome.storage.local.get('dnr_allow_rule_ids');
-    const removeRuleIds = Array.isArray(dnr_allow_rule_ids) ? dnr_allow_rule_ids : [];
-    const addRules = rules;
-    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
-    await chrome.storage.local.set({ dnr_allow_rule_ids: addRules.map(r=>r.id) });
-  } catch {}
+    const storedIds = Array.isArray(dnr_allow_rule_ids) ? dnr_allow_rule_ids : [];
+    let existingIdsInRange = [];
+    try {
+      const existing = await chrome.declarativeNetRequest.getDynamicRules();
+      const ids = Array.isArray(existing) ? existing.map(r => r.id) : [];
+      // Legacy allow range: 900000-909999; Current allow range: 1200000000-1299999999
+      existingIdsInRange = ids.filter(id => (id >= 900000 && id <= 909999) || (id >= 1200000000 && id <= 1299999999));
+    } catch {}
+    const removeRuleIds = Array.from(new Set([...storedIds, ...existingIdsInRange]));
+    
+    // Generate new rules
+    const addRules = buildAllowRulesFromConfig(cfg);
+    
+    // Update rules in a single batch
+    if (removeRuleIds.length > 0 || addRules.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({ 
+        removeRuleIds, 
+        addRules 
+      });
+      
+      // Only update storage if the operation was successful
+      await chrome.storage.local.set({ 
+        dnr_allow_rule_ids: addRules.map(r => r.id) 
+      });
+      
+      console.log(`Updated DNR allow rules: ${removeRuleIds.length} removed, ${addRules.length} added`);
+    }
+  } catch (e) {
+    console.error('Error syncing DNR allow rules:', e);
+  }
 }
 
 // Badge helper: show threats counter on the extension icon
@@ -416,6 +529,16 @@ try {
       await setTabThreats({});
     } catch {}
     try { await updateBadge(); } catch {}
+  });
+} catch {}
+
+// Open options page maximized in a tab when the toolbar icon is clicked
+try {
+  chrome.action.onClicked.addListener(async () => {
+    try {
+      const url = chrome.runtime.getURL('options.html');
+      await chrome.tabs.create({ url });
+    } catch {}
   });
 } catch {}
 
@@ -644,9 +767,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Return persisted recent events if available; fallback to in-memory
       try {
         const { recent_events = [] } = await chrome.storage.local.get(RECENT_KEY);
-        sendResponse({ ok: true, logs: (Array.isArray(recent_events) ? recent_events : []).slice(-5) });
+        sendResponse({ ok: true, logs: (Array.isArray(recent_events) ? recent_events : []).slice(-100) });
       } catch {
-        sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-5) });
+        sendResponse({ ok: true, logs: RECENT_EVENTS.slice(-100) });
       }
       return;
     }
