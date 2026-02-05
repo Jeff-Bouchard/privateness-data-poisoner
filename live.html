@@ -123,6 +123,108 @@
             border-radius: 6px;
             color: #c9e1ff
         }
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #ff6b6b
+        }
+        .live-indicator-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #ff6b6b;
+            box-shadow: 0 0 0 0 rgba(255, 107, 107, .6);
+            animation: live-pulse 1.4s infinite
+        }
+        @keyframes live-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 107, 107, .6);
+                transform: scale(1)
+            }
+            70% {
+                box-shadow: 0 0 0 8px rgba(255, 107, 107, 0);
+                transform: scale(1.08)
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 107, 107, 0);
+                transform: scale(1)
+            }
+        }
+        .log-row {
+            transition: background-color .25s ease, transform .12s ease;
+        }
+        .log-row.new {
+            background: rgba(78, 161, 255, .06);
+            transform: translateY(-1px);
+        }
+        .url-domain {
+            font-weight: 500;
+        }
+        .url-path {
+            margin-left: 4px;
+            color: var(--muted);
+        }
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 6px;
+            border-radius: 999px;
+            font-size: 11px;
+            border: 1px solid var(--border);
+            background: #0f1820;
+            color: #cfe4ff;
+            white-space: nowrap;
+        }
+        .tag-dnr {
+            border-color: #ff9f43;
+            background: rgba(255, 159, 67, .14);
+            color: #ffe0b5;
+        }
+        .tag-poison {
+            border-color: #4ea1ff;
+            background: rgba(78, 161, 255, .16);
+            color: #e0ecff;
+        }
+        .tag-wipe {
+            border-color: #ff6b6b;
+            background: rgba(255, 107, 107, .16);
+            color: #ffe1e1;
+        }
+        .tag-event {
+            border-color: var(--border);
+            background: #0f1820;
+            color: #cfe4ff;
+        }
+        .filters {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-left: auto;
+        }
+        .filters-label {
+            font-size: 11px;
+            color: var(--muted);
+        }
+        .filter-toggle {
+            padding: 4px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: #0f1820;
+            color: #cfe4ff;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .filter-toggle.active {
+            border-color: #4ea1ff;
+            background: rgba(78, 161, 255, .18);
+            color: #e6ebf1;
+        }
     </style>
 </head>
 
@@ -130,6 +232,10 @@
     <header>
         <img src="favicon.ico" alt="logo" width="20" height="20" style="border-radius:4px;border:1px solid var(--border);background:#0e1418" />
         <h1>Privateness — Live Threat Log</h1>
+        <div class="live-indicator">
+            <span class="live-indicator-dot"></span>
+            <span>Live</span>
+        </div>
         <div id="status" class="muted" style="margin-left:auto"></div>
     </header>
     <main>
@@ -144,6 +250,14 @@
                 </select>
             </label>
             <button id="clear" class="secondary" title="Clear view (does not affect service data)">Clear</button>
+            <div class="filters">
+                <span class="filters-label">Types:</span>
+                <button id="filterDnr" class="filter-toggle active" type="button">DNR</button>
+                <button id="filterPoison" class="filter-toggle active" type="button">Poison</button>
+                <button id="filterWipe" class="filter-toggle active" type="button">Wipe</button>
+                <button id="filterOther" class="filter-toggle active" type="button">Other</button>
+                <button id="filterAll" class="filter-toggle" type="button">All</button>
+            </div>
         </div>
         <div class="wrap" id="wrap" style="max-height:70vh">
             <table>

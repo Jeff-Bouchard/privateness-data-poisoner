@@ -74,6 +74,15 @@ async function clearRecent(){
   try { RECENT_EVENTS = []; await chrome.storage.local.set({ [RECENT_KEY]: [] }); } catch {}
 }
 
+ (async function initRecentFromStorage(){
+  try {
+    const { recent_events = [] } = await chrome.storage.local.get(RECENT_KEY);
+    if (Array.isArray(recent_events) && recent_events.length) {
+      RECENT_EVENTS = recent_events.slice(-RECENT_MAX);
+    }
+  } catch {}
+})();
+
 // Live log: manage subscribers and broadcast
 const LIVE_SUBS = new Set(); // each: { port, scope: 'global'|'tab', tabId: number|null, size: 25|50|100 }
 function snapshotRecent(size, scope, tabId){
