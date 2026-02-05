@@ -17,7 +17,8 @@
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
     "storage",
-    "tabs"
+    "tabs",
+    "browsingData"
   ],
   "host_permissions": [
     "<all_urls>"

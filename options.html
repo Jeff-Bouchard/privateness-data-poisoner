@@ -438,9 +438,53 @@
             </div>
         </fieldset>
 
+        <!-- Wipe Browsing Data -->
+        <fieldset class="card">
+            <legend>Wipe browsing data</legend>
+            <div class="small" style="margin-bottom:10px;color:var(--muted)">Select what to erase and time range, then click Wipe. This affects the current browser profile.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:12px">
+              <div>
+                <h3 style="margin:0 0 8px;font-size:14px;color:var(--text)">Data types</h3>
+                <label><input type="checkbox" id="wd_history" checked> History</label>
+                <label><input type="checkbox" id="wd_downloads" checked> Downloads</label>
+                <label><input type="checkbox" id="wd_cookies" checked> Cookies</label>
+                <label><input type="checkbox" id="wd_cache" checked> Cache</label>
+                <label><input type="checkbox" id="wd_cacheStorage" checked> CacheStorage</label>
+                <label><input type="checkbox" id="wd_localStorage" checked> LocalStorage</label>
+                <label><input type="checkbox" id="wd_indexedDB" checked> IndexedDB</label>
+                <label><input type="checkbox" id="wd_serviceWorkers" checked> ServiceWorkers</label>
+                <label><input type="checkbox" id="wd_webSQL"> WebSQL</label>
+                <label><input type="checkbox" id="wd_fileSystems"> FileSystems</label>
+                <label><input type="checkbox" id="wd_formData"> Form data</label>
+                <label><input type="checkbox" id="wd_passwords"> Passwords</label>
+                <label><input type="checkbox" id="wd_autofill"> Autofill</label>
+                <label><input type="checkbox" id="wd_siteSettings"> Site settings</label>
+                <label><input type="checkbox" id="wd_pluginData"> Plugin data</label>
+                <label><input type="checkbox" id="wd_appcache"> AppCache</label>
+              </div>
+              <div>
+                <h3 style="margin:0 0 8px;font-size:14px;color:var(--text)">Time range</h3>
+                <label>Preset
+                  <select id="wd_preset">
+                    <option value="hour">Last hour</option>
+                    <option value="day">Last 24 hours</option>
+                    <option value="week">Last 7 days</option>
+                    <option value="month">Last 30 days</option>
+                    <option value="all" selected>All time</option>
+                  </select>
+                </label>
+                <div class="small hint">All time starts from epoch (1970). Presets compute relative to now.</div>
+              </div>
+            </div>
+            <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button id="wd_wipe" class="primary">Wipe now</button>
+              <span id="wd_status" class="small"></span>
+            </div>
+        </fieldset>
+
         <!-- Allow/Block Lists (consolidated) -->
         <fieldset class="card">
-            <legend>Allow/Block Lists</legend>
+          <legend>Allow/Block Lists</legend>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
                 <!-- Whitelist -->
                 <div>

@@ -38,6 +38,17 @@ function timeFull(ts){
 // Live log (tab) removed
 
 // Preview modal wiring
+document.getElementById('seeAsTab')?.addEventListener('click', async ()=>{
+  try {
+    const url = chrome.runtime.getURL('live.html');
+    if (chrome.tabs && chrome.tabs.create) {
+      await chrome.tabs.create({ url });
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch {}
+});
+
 function openPreview(text, meta){
   try {
     const modal = document.getElementById('previewModal');
@@ -55,6 +66,47 @@ function closePreview(){
 }
 document.getElementById('previewClose')?.addEventListener('click', closePreview);
 document.getElementById('previewModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'previewModal') closePreview(); });
+
+// Wipe Browsing Data wiring
+function collectWipeTypes(){
+  const map = {
+    wd_history: 'history',
+    wd_downloads: 'downloads',
+    wd_cookies: 'cookies',
+    wd_cache: 'cache',
+    wd_cacheStorage: 'cacheStorage',
+    wd_localStorage: 'localStorage',
+    wd_indexedDB: 'indexedDB',
+    wd_serviceWorkers: 'serviceWorkers',
+    wd_webSQL: 'webSQL',
+    wd_fileSystems: 'fileSystems',
+    wd_formData: 'formData',
+    wd_passwords: 'passwords',
+    wd_autofill: 'autofill',
+    wd_siteSettings: 'siteSettings',
+    wd_pluginData: 'pluginData',
+    wd_appcache: 'appcache'
+  };
+  const out = [];
+  for (const id in map){ const el = document.getElementById(id); if (el && el.checked) out.push(map[id]); }
+  return out;
+}
+async function doWipe(){
+  const btn = document.getElementById('wd_wipe');
+  const status = document.getElementById('wd_status');
+  const preset = document.getElementById('wd_preset')?.value || 'all';
+  const types = collectWipeTypes();
+  if (!types.length){ if (status){ status.textContent = 'Select at least one type'; status.className='small'; } return; }
+  try {
+    btn.disabled = true; if (status){ status.textContent = 'Wiping…'; status.className='small'; }
+    const res = await chrome.runtime.sendMessage({ type: 'WIPE_DATA', preset, types });
+    if (res && res.ok){ if (status){ status.textContent = `Done (${(res.wiped||[]).length} types)`; status.className='small ok'; } }
+    else { if (status){ status.textContent = `Failed: ${res && res.error ? res.error : 'unknown error'}`; status.className='small'; } }
+  } catch (e) {
+    if (status){ status.textContent = `Error: ${String(e&&e.message||e)}`; status.className='small'; }
+  } finally { btn.disabled = false; setTimeout(()=>{ if (status) status.textContent=''; }, 2000); }
+}
+document.getElementById('wd_wipe')?.addEventListener('click', doWipe);
 // Copy preview
 async function copyPreview(){
   try {

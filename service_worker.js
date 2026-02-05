@@ -761,6 +761,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true, threats: 0, perTab: 0 });
       return;
     }
+    if (message?.type === 'WIPE_DATA') {
+      try {
+        const types = Array.isArray(message.types) ? message.types : [];
+        const preset = String(message.preset||'').toLowerCase();
+        let since = 0;
+        const now = Date.now();
+        if (Number.isFinite(message.sinceMs)) {
+          since = Math.max(0, Number(message.sinceMs));
+        } else if (preset) {
+          const H = 60*60*1000, D = 24*H, W = 7*D, M = 30*D;
+          if (preset === 'hour') since = now - H;
+          else if (preset === 'day' || preset === '24h') since = now - D;
+          else if (preset === 'week') since = now - W;
+          else if (preset === 'month') since = now - M;
+          else if (preset === 'forever' || preset === 'all') since = 0;
+        }
+        const removal = {};
+        for (const t of types) { removal[String(t)] = true; }
+        const originTypes = { unprotectedWeb: true, protectedWeb: true, extension: false }; 
+        await chrome.browsingData.remove({ since, originTypes }, removal);
+        const entry = { ts: Date.now(), type: 'wipe', action: 'browsingData.remove', ruleId: 'wipe', request: { url: '', initiator: '', method: types.join(',') } };
+        try { await pushRecent(entry); broadcastLiveEvent(entry); } catch {}
+        sendResponse({ ok: true, wiped: Object.keys(removal), since });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e && e.message || e) });
+      }
+      return;
+    }
     if (message?.type === 'GET_RECENT') {
       const cfg = await getConfig();
       if (!cfg.enabled) { sendResponse({ ok: true, logs: [] }); return; }
