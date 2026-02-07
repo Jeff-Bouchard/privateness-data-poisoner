@@ -511,6 +511,69 @@
     const pool = (DEFUNCT_CUSTOM.length ? DEFUNCT_CUSTOM : DEFUNCT_BASE);
     return pool[Math.floor(rand()*pool.length)] || 'Nortel';
   }
+
+  function buildPoison(data, contentType){
+    try {
+      const pCfg = (CFG.modules && CFG.modules.poisonConfig) || {};
+      const incRid = (pCfg.poisonIncludeRid !== false);
+      const incJit = (pCfg.poisonIncludeJitter !== false);
+      const incPII = !!pCfg.poisonIncludeFakePII;
+      const incMeme = !!pCfg.poisonMemeBanner;
+
+      const ts = Date.now();
+      const rid = Math.floor(rand()*1e9).toString(36) + Math.floor(rand()*1e9).toString(36);
+      const jitter = Math.floor(rand()*1000);
+      const behavior = {
+        pages_seen: Math.floor(1 + rand()*10),
+        clicks: Math.floor(1 + rand()*25),
+        scroll_depth: [25,50,75,100][Math.floor(rand()*4)],
+        dwell_bucket_sec: [5,15,30,60,120][Math.floor(rand()*5)]
+      };
+
+      const banner = incMeme
+        ? `Privateness.network: data-poisoning active. Cry harder.`
+        : '';
+
+      if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
+        const params = new URLSearchParams(typeof data === 'string' ? data : '');
+        params.set('ts', String(ts));
+        if (incRid) params.set('rid', rid);
+        if (incJit) params.set('j', String(jitter));
+        params.set('pv', String(behavior.pages_seen));
+        params.set('clk', String(behavior.clicks));
+        params.set('sd', String(behavior.scroll_depth));
+        params.set('dw', String(behavior.dwell_bucket_sec));
+        if (incMeme) params.set('poise_banner', banner);
+        if (incPII) {
+          params.set('email', fakeEmail());
+          params.set('name', fakeName());
+          params.set('phone', fakePhone());
+        }
+        return params.toString();
+      }
+
+      let obj = {};
+      if (typeof data === 'string' && data.trim()) {
+        try { obj = JSON.parse(data); } catch { obj = {}; }
+      } else if (data && typeof data === 'object') {
+        try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; }
+      }
+
+      if (!obj || typeof obj !== 'object') obj = {};
+      if (!obj.meta || typeof obj.meta !== 'object') obj.meta = {};
+      obj.meta.poise_ts = ts;
+      if (incRid) obj.meta.poise_rid = rid;
+      if (incJit) obj.meta.poise_jitter = jitter;
+      obj.meta.poise_noise = behavior;
+      if (incMeme) obj.meta.poise_banner = banner;
+      if (incPII) obj.meta.poise_pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
+
+      return JSON.stringify(obj);
+    } catch {
+      return (typeof data === 'string') ? data : '';
+    }
+  }
+
   function mutateKeyValue(k,v){
     const K = (k||'').toLowerCase();
     if (/email/.test(K)) return fakeEmail();
@@ -522,9 +585,19 @@
   }
   function mutateObject(obj){
     try {
-      const out = Array.isArray(obj) ? [] : {};
+      const isArray = Array.isArray(obj);
+      const out = isArray ? [] : {};
       for (const [k,v] of Object.entries(obj)){
         out[k] = (v && typeof v === 'object') ? mutateObject(v) : mutateKeyValue(k,v);
+      }
+      // Attach coarse synthetic behavior noise on top-level analytic objects
+      if (!isArray && obj && typeof obj === 'object' && !('poise_noise' in out)) {
+        out.poise_noise = {
+          pages_seen: Math.floor(1 + rand()*10),
+          clicks: Math.floor(1 + rand()*25),
+          scroll_depth: [25,50,75,100][Math.floor(rand()*4)],
+          dwell_bucket_sec: [5,15,30,60,120][Math.floor(rand()*5)]
+        };
       }
       return out;
     } catch { return obj; }
@@ -722,67 +795,6 @@
     }
   } catch {}
 
-  // Helper: build poisoned payload in expected formats
-  function buildPoison(data, contentType){
-    try {
-      const ts = Date.now();
-      const pCfg = (CFG.modules && CFG.modules.poisonConfig) || {};
-      const incRid = (pCfg.poisonIncludeRid !== false);
-      const incJit = (pCfg.poisonIncludeJitter !== false);
-      const incPII = !!pCfg.poisonIncludeFakePII;
-      const rid = Math.floor(rand()*1e9).toString(36) + Math.floor(rand()*1e9).toString(36);
-      const base = { event: 'heartbeat', ts, meta: { locale: 'en-US', tz: 'UTC' } };
-      if (incRid) base.rid = rid;
-      if (incJit) base.jitter = Math.floor(rand()*1000);
-      
-      if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
-        const params = new URLSearchParams(typeof data === 'string' ? data : '');
-        params.set('e', base.event);
-        if (incRid) params.set('rid', rid);
-        params.set('ts', String(ts));
-        if (incJit) params.set('j', String(base.jitter));
-        if (incPII) {
-          params.set('email', fakeEmail());
-          params.set('name', fakeName());
-          params.set('phone', fakePhone());
-        }
-        return params.toString();
-      }
-      
-      // JSON-ish - always generate a meaningful payload even if data is empty
-      let obj = {};
-      if (typeof data === 'string' && data.trim()) { 
-        try { obj = JSON.parse(data); } catch { obj = {}; } 
-      } else if (data && typeof data === 'object') { 
-        try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; } 
-      }
-      
-      const merged = { ...obj, ...base };
-      if (incPII) {
-        // add clearly synthetic hints only when enabled
-        merged.pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
-      }
-      
-      // Add some synthetic analytics data to make the payload more realistic
-      merged.analytics = {
-        session_id: fakeUUID(),
-        page_view: Math.floor(rand() * 100),
-        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        screen_resolution: '1920x1080',
-        viewport: '1366x768'
-      };
-      
-      return JSON.stringify(merged);
-    } catch { 
-      // Fallback: return a minimal poison payload
-      return JSON.stringify({ 
-        event: 'heartbeat', 
-        ts: Date.now(), 
-        rid: Math.floor(Math.random()*1e9).toString(36) 
-      }); 
-    }
-  }
-
   function extractContentType(headers){
     try {
       if (!headers) return '';
@@ -805,6 +817,8 @@
         url: ev.url || '',
         method: ev.method || 'beacon',
         initiator: location.href,
+        action: ev.action || '',
+        ruleId: ev.ruleId || '',
         preview: (ev.preview || '').toString().slice(0, 300)
       };
       window.dispatchEvent(new CustomEvent('__POISE_POISONED', { detail }));

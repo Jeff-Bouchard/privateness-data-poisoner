@@ -15,7 +15,14 @@ const DEFAULT_CONFIG = {
     navigatorClamp: true,
     storageHygiene: true,
     blockBeacons: true,
-    stripHeadersLimited: true
+    stripHeadersLimited: true,
+    poisonConfig: {
+      poisonIncludeRid: true,
+      poisonIncludeJitter: true,
+      poisonIncludeFakePII: false,
+      poisonMemeBanner: false,
+      defunctNames: []
+    }
   },
   // Show per-tab threats counter in UI (optional)
   statsPerTab: false,
@@ -824,6 +831,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         type: 'poison',
         action: ev.action || 'poison',
         ruleId: ev.ruleId ? String(ev.ruleId) : 'poison',
+        preview: typeof ev.preview === 'string' ? ev.preview.slice(0, 300) : '',
         request: {
           url: ev.url || '',
           initiator: ev.initiator || (sender && sender.url) || '',

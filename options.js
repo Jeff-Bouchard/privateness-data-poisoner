@@ -41,10 +41,19 @@ function timeFull(ts){
 document.getElementById('seeAsTab')?.addEventListener('click', async ()=>{
   try {
     const url = chrome.runtime.getURL('live.html');
-    if (chrome.tabs && chrome.tabs.create) {
-      await chrome.tabs.create({ url });
-    } else {
+    if (!(chrome.tabs && chrome.tabs.query && chrome.tabs.update && chrome.tabs.create)) {
       window.open(url, '_blank');
+      return;
+    }
+    const tabs = await chrome.tabs.query({ url });
+    if (Array.isArray(tabs) && tabs.length && typeof tabs[0].id === 'number') {
+      const t = tabs[0];
+      try { await chrome.tabs.update(t.id, { active: true }); } catch {}
+      if (typeof t.windowId === 'number' && chrome.windows && chrome.windows.update) {
+        try { await chrome.windows.update(t.windowId, { focused: true }); } catch {}
+      }
+    } else {
+      await chrome.tabs.create({ url });
     }
   } catch {}
 });
@@ -293,7 +302,7 @@ async function loadConfig(){
   const cfg = (res && res.ok) ? res.config : null;
   if (!cfg) return;
   const mode = document.getElementById('mode');
-  if (mode) mode.value = cfg.mode || 'moderate';
+  if (mode) mode.value = cfg.mode || 'strict';
   const ids = ['canvasNoise','audioNoise','webglNoise','perfQuantize','navigatorClamp','storageHygiene','blockBeacons'];
   for (const id of ids){
     const el = document.getElementById(id);
@@ -326,12 +335,14 @@ async function loadConfig(){
   const pc = (cfg.modules && cfg.modules.poisonConfig) || {};
   const pcIds = ['poisonIncludeRid','poisonIncludeJitter','poisonIncludeFakePII'];
   pcIds.forEach((id)=>{ const el = document.getElementById(id); if (el) el.checked = (pc[id] !== false); });
+  const meme = document.getElementById('poisonMemeBanner');
+  if (meme) meme.checked = !!pc.poisonMemeBanner;
   // Custom defunct names list
   renderDefunctList(Array.isArray(pc.defunctNames) ? pc.defunctNames : []);
 }
 
 async function saveConfig(){
-  const mode = document.getElementById('mode')?.value || 'moderate';
+  const mode = document.getElementById('mode')?.value || 'strict';
   const ids = ['canvasNoise','audioNoise','webglNoise','perfQuantize','navigatorClamp','storageHygiene','blockBeacons'];
   const modules = {};
   for (const id of ids){
@@ -344,6 +355,7 @@ async function saveConfig(){
     poisonIncludeRid: !!document.getElementById('poisonIncludeRid')?.checked,
     poisonIncludeJitter: !!document.getElementById('poisonIncludeJitter')?.checked,
     poisonIncludeFakePII: !!document.getElementById('poisonIncludeFakePII')?.checked,
+    poisonMemeBanner: !!document.getElementById('poisonMemeBanner')?.checked,
     defunctNames: getDefunctList()
   };
   modules.poisonConfig = poisonConfig;

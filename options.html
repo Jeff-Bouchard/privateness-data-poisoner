@@ -397,8 +397,8 @@
                 <label>Mode
                     <select id="mode">
                         <option value="baseline">Baseline</option>
-                        <option value="moderate" selected>Moderate</option>
-                        <option value="strict">Strict + Data Poisoning</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="strict" selected>Strict + Data Poisoning</option>
                     </select>
                 </label>
                 <div class="small hint">
@@ -655,6 +655,7 @@
             <label><input type="checkbox" id="poisonIncludeRid" checked> Include synthetic request ID (rid)</label>
             <label><input type="checkbox" id="poisonIncludeJitter" checked> Include timing jitter</label>
             <label><input type="checkbox" id="poisonIncludeFakePII"> Include synthetic PII hints (email/name/phone) in JSON payloads</label>
+            <label><input type="checkbox" id="poisonMemeBanner"> Enable "meme banner" (opt-in taunt marker in poisoned payloads)</label>
             <label><input type="checkbox" id="enableFileLogging" checked> Enable file-based logging for reproducibility</label>
             <div class="small" style="margin:10px 0 6px;color:var(--muted)">Custom defunct brand/company names to use when replacing brand/org/vendor fields in poisoned JSON (optional):</div>
             <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
