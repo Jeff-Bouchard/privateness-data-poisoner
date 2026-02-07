@@ -27,4 +27,4 @@ Thank you for considering a contribution!
 ## Security
 
 - Follow the `SECURITY.md` policy and global no-RCE rule.
-- Report vulnerabilities privately to security@privateness.network.
+- Report vulnerabilities privately to <security@privateness.network>.

@@ -7,13 +7,19 @@ Privateness is “the quality of being private.” This browser extension protec
 ## 1) What the extension does
 
 - Reduces tracking and fingerprinting (e.g., suppresses analytics beacons, adds small noise to fingerprinting APIs, clamps timing precision).
+- In Strict + Data Poisoning mode, the extension may modify outbound analytics/telemetry requests so that third-party endpoints receive synthetic payloads.
 - All protections run locally on the user’s device.
 
 ## 2) Zero data collection
 
 - We do not collect, receive, transmit, sell, rent, or share any personal or non‑personal user data.
-- The extension does not send telemetry or analytics to us or any third party.
+- The extension does not send telemetry or analytics to Privateness.network or any other party on our behalf.
 - We have no server‑side components for this extension’s operation.
+
+Clarification:
+
+- The extension does not transmit any data to Privateness.network.
+- The extension may suppress or modify requests that your browser would otherwise send to known third-party analytics endpoints. When enabled, data poisoning replaces/augments those third-party telemetry payloads with synthetic values.
 
 ## 3) Local‑only operation
 

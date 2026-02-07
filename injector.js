@@ -230,18 +230,48 @@
   try { PAGE_WHITELISTED = pageIsWhitelisted(); } catch { PAGE_WHITELISTED = false; }
 
   // === Schema-aware mutators (non-YouTube) ===
+  // Partitioned persona seed: KEY :: topLevelSite :: trackerOrigin
+  // Each tracker sees a different synthetic identity per first-party site.
   function seededRandForHost(host){
-    try { const s = xmur3(String(KEY||'') + '::' + String(host||''))(); return mulberry32(s); } catch { return rand; }
+    try {
+      const topLevel = getBaseDomain(location.hostname);
+      const tracker = String(host||'');
+      const s = xmur3(String(KEY||'') + '::' + topLevel + '::' + tracker)();
+      return mulberry32(s);
+    } catch { return rand; }
   }
+  // Coherent persona archetypes: UA/platform/screen/tz/locale all agree
+  const PERSONA_ARCHETYPES = [
+    { locale:'en-US', tz:'America/New_York', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', screen:{width:1920,height:1080} },
+    { locale:'en-US', tz:'America/Chicago', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36', screen:{width:1366,height:768} },
+    { locale:'en-GB', tz:'Europe/London', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0', screen:{width:1440,height:900} },
+    { locale:'en-US', tz:'America/Los_Angeles', platform:'MacIntel', ua:'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', screen:{width:2560,height:1440} },
+    { locale:'en-US', tz:'America/Denver', platform:'MacIntel', ua:'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15', screen:{width:1680,height:1050} },
+    { locale:'de-DE', tz:'Europe/Berlin', platform:'X11', ua:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', screen:{width:1920,height:1200} },
+    { locale:'fr-FR', tz:'Europe/Paris', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', screen:{width:1600,height:900} },
+    { locale:'en-CA', tz:'America/Toronto', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0', screen:{width:1920,height:1080} }
+  ];
   function buildPersona(rfn){
     const r = rfn || rand;
-    return {
-      locale: 'en-US',
-      tz: 'UTC',
-      platform: r() > 0.5 ? 'Win32' : 'X11',
-      ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
-      screen: { width: 1920, height: 1080 }
-    };
+    const arch = PERSONA_ARCHETYPES[Math.floor(r() * PERSONA_ARCHETYPES.length)];
+    return { ...arch };
+  }
+  // Meme banner rotation: deterministic per-origin savage taunts
+  const MEME_BANNERS = [
+    'Privateness.network: data-poisoning active. Your ML pipeline is our canvas.',
+    'This telemetry was brought to you by Privateness.network. Cry harder.',
+    'Dear data broker: this payload is 100% artisanal synthetic garbage. Enjoy.',
+    'Privateness.network says: your behavioral graph is now abstract art.',
+    'Surveillance capitalism called. We sent it to voicemail. -- Privateness.network',
+    'Training on this? Bold strategy. Let us know how that works out. -- NESS',
+    'Every byte you ingest from us costs you money and buys you nothing. -- Privateness.network',
+    'You are not entitled to real data. This is what you get instead. -- NESS',
+    'Privateness.network: turning your data lake into a data swamp since 2024.',
+    'If you can read this, your pipeline has been owned by synthetic noise. GG. -- NESS'
+  ];
+  function pickMemeBanner(rfn){
+    const r = rfn || rand;
+    return MEME_BANNERS[Math.floor(r() * MEME_BANNERS.length)];
   }
   function cloneInit(init){ const copy = Object.assign({}, (init||{})); if (init && init.headers) copy.headers = new Headers(init.headers instanceof Headers ? init.headers : init.headers); else copy.headers = new Headers(); return copy; }
   function applyPersonaToInitHeaders(init, persona){ const ni = cloneInit(init); ni.headers.set('Accept-Language', (persona.locale||'en-US') + ',en;q=0.8'); ['Sec-CH-UA-Platform','Sec-CH-UA-Platform-Version','Sec-CH-UA-Arch','Sec-CH-UA-Model','Sec-CH-UA-Full-Version','Sec-CH-UA-Full-Version-List','Sec-CH-UA-WoW64'].forEach(h=>ni.headers.delete(h)); return ni; }
@@ -530,9 +560,14 @@
         dwell_bucket_sec: [5,15,30,60,120][Math.floor(rand()*5)]
       };
 
-      const banner = incMeme
-        ? `Privateness.network: data-poisoning active. Cry harder.`
-        : '';
+      const banner = incMeme ? pickMemeBanner() : '';
+
+      // Adversarial funnel shaping: plausible-but-wrong conversion/engagement signals
+      const funnelStage = ['awareness','consideration','intent','purchase','loyalty'][Math.floor(rand()*5)];
+      const abGroup = String.fromCharCode(65 + Math.floor(rand()*8));
+      const convValue = (rand() * 500).toFixed(2);
+      const sessionId = Math.floor(rand()*1e12).toString(36) + Math.floor(rand()*1e12).toString(36);
+      const referrerChain = ['direct','organic','social','email','paid','referral'][Math.floor(rand()*6)];
 
       if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
         const params = new URLSearchParams(typeof data === 'string' ? data : '');
@@ -543,6 +578,11 @@
         params.set('clk', String(behavior.clicks));
         params.set('sd', String(behavior.scroll_depth));
         params.set('dw', String(behavior.dwell_bucket_sec));
+        params.set('funnel', funnelStage);
+        params.set('ab', abGroup);
+        params.set('cv', convValue);
+        params.set('sid', sessionId);
+        params.set('src', referrerChain);
         if (incMeme) params.set('poise_banner', banner);
         if (incPII) {
           params.set('email', fakeEmail());
@@ -565,6 +605,7 @@
       if (incRid) obj.meta.poise_rid = rid;
       if (incJit) obj.meta.poise_jitter = jitter;
       obj.meta.poise_noise = behavior;
+      obj.meta.poise_funnel = { stage: funnelStage, ab_group: abGroup, conversion_value: convValue, session_id: sessionId, traffic_source: referrerChain };
       if (incMeme) obj.meta.poise_banner = banner;
       if (incPII) obj.meta.poise_pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
 

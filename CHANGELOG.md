@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-02-07
+
+- Live Log (tab)
+  - Reuse an existing `live.html` tab instead of opening duplicates.
+  - Display remote endpoint URLs (not `live.html`) and support type filters.
+- Default profile
+  - Default mode is now Strict + Data Poisoning (Options UI + default config).
+- Data poisoning (Strict mode)
+  - Opt-in meme banner injection into poisoned telemetry payloads.
+  - Partitioned persona seeding to reduce cross-site correlation (top-level site + tracker origin).
+  - Additional synthetic funnel / attribution fields to degrade profiling pipelines.
+
 ## [0.3] - 2025-08-23
 
 - Global RCE-Resistance and Hardening
