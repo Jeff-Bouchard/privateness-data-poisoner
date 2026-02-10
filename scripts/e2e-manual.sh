@@ -10,53 +10,109 @@ BROWSER="brave"
 PROFILE_DIR="Default"
 EXT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 
+is_windows() {
+  case "$(uname -s 2>/dev/null || echo '')" in
+    MINGW*|MSYS*|CYGWIN*) return 0;;
+    *) return 1;;
+  esac
+}
+
 find_brave() {
-  local CANDIDATES=(
-    "/c/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
-    "/c/Program Files (x86)/BraveSoftware/Brave-Browser/Application/brave.exe"
-    "$LOCALAPPDATA/BraveSoftware/Brave-Browser/Application/brave.exe"
-  )
-  for p in "${CANDIDATES[@]}"; do
-    [[ -n "$p" && -f "$p" ]] && { echo "$p"; return 0; }
-  done
-  if command -v brave.exe >/dev/null 2>&1; then
-    command -v brave.exe; return 0
+  if is_windows; then
+    local CANDIDATES=(
+      "/c/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
+      "/c/Program Files (x86)/BraveSoftware/Brave-Browser/Application/brave.exe"
+      "$LOCALAPPDATA/BraveSoftware/Brave-Browser/Application/brave.exe"
+    )
+    for p in "${CANDIDATES[@]}"; do
+      [[ -n "$p" && -f "$p" ]] && { echo "$p"; return 0; }
+    done
+    if command -v brave.exe >/dev/null 2>&1; then
+      command -v brave.exe; return 0
+    fi
+    echo ""; return 1
   fi
+
+  local CANDIDATES_LINUX=(
+    "brave-browser"
+    "brave"
+  )
+  for b in "${CANDIDATES_LINUX[@]}"; do
+    if command -v "$b" >/dev/null 2>&1; then
+      command -v "$b"; return 0
+    fi
+  done
   echo ""; return 1
 }
 
 find_chrome() {
-  local CANDIDATES=(
-    "/c/Program Files/Google/Chrome/Application/chrome.exe"
-    "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
-    "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe"
-  )
-  for p in "${CANDIDATES[@]}"; do
-    [[ -n "$p" && -f "$p" ]] && { echo "$p"; return 0; }
-  done
-  if command -v chrome.exe >/dev/null 2>&1; then
-    command -v chrome.exe; return 0
+  if is_windows; then
+    local CANDIDATES=(
+      "/c/Program Files/Google/Chrome/Application/chrome.exe"
+      "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+      "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe"
+    )
+    for p in "${CANDIDATES[@]}"; do
+      [[ -n "$p" && -f "$p" ]] && { echo "$p"; return 0; }
+    done
+    if command -v chrome.exe >/dev/null 2>&1; then
+      command -v chrome.exe; return 0
+    fi
+    echo ""; return 1
   fi
+
+  local CANDIDATES_LINUX=(
+    "google-chrome"
+    "google-chrome-stable"
+    "chromium"
+    "chromium-browser"
+  )
+  for b in "${CANDIDATES_LINUX[@]}"; do
+    if command -v "$b" >/dev/null 2>&1; then
+      command -v "$b"; return 0
+    fi
+  done
   echo ""; return 1
 }
 
 maybe_kill_running_browser() {
-  local proc
+  if is_windows; then
+    local proc
+    case "$BROWSER" in
+      brave) proc="brave.exe";;
+      chrome) proc="chrome.exe";;
+      *) return 0;;
+    esac
+    if tasklist.exe 2>/dev/null | grep -qiE "^${proc//./\\.}\\s"; then
+      echo
+      echo "[!] $proc is currently running. Chromium often ignores new --load-extension flags while running."
+      read -r -p "Close all $BROWSER windows for you now (taskkill /IM $proc /F)? [y/N] " ans
+      if [[ "${ans:-}" =~ ^[Yy]$ ]]; then
+        taskkill.exe /IM "$proc" /F >/dev/null 2>&1 || true
+        echo "[i] Terminated $proc."
+      else
+        echo "[i] Not terminating $proc. If the extension doesn't load, close the browser manually and rerun." >&2
+      fi
+    fi
+    return 0
+  fi
+
+  local pname=""
   case "$BROWSER" in
-    brave) proc="brave.exe";;
-    chrome) proc="chrome.exe";;
+    brave) pname="brave-browser";;
+    chrome) pname="chrome";;
     *) return 0;;
   esac
 
-  if tasklist.exe 2>/dev/null | grep -qiE "^${proc//./\\.}\\s"; then
+  if command -v pgrep >/dev/null 2>&1 && pgrep -x "$pname" >/dev/null 2>&1; then
     echo
-    echo "[!] $proc is currently running. Chromium often ignores new --load-extension flags while running."
-    read -r -p "Close all $BROWSER windows for you now (taskkill /IM $proc /F)? [y/N] " ans
+    echo "[!] $pname is currently running. Chromium often ignores new --load-extension flags while running."
+    read -r -p "Close all $BROWSER windows for you now (pkill $pname)? [y/N] " ans
     if [[ "${ans:-}" =~ ^[Yy]$ ]]; then
-      taskkill.exe /IM "$proc" /F >/dev/null 2>&1 || true
-      echo "[i] Terminated $proc."
+      pkill -x "$pname" >/dev/null 2>&1 || true
+      echo "[i] Terminated $pname."
     else
-      echo "[i] Not terminating $proc. If the extension doesn't load, close the browser manually and rerun." >&2
+      echo "[i] Not terminating $pname. If the extension doesn't load, close the browser manually and rerun." >&2
     fi
   fi
 }
@@ -86,7 +142,7 @@ Usage: scripts/e2e-manual.sh [options]
 
 Notes:
 - This is an interactive checklist runner, not an automated test.
-- It assumes Git Bash on Windows.
+- It is intended to run on Windows (Git Bash) and Linux.
 EOF
 }
 
@@ -110,12 +166,6 @@ pause() {
   echo
   echo "==> $msg"
   read -r -p "Press Enter to continue..." _
-}
-
-open_url() {
-  local url="$1"
-  # Detach open via cmd.exe
-  cmd.exe /c start "" "$url" >/dev/null 2>&1 || true
 }
 
 launch_browser_with_extension() {

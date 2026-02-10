@@ -12,10 +12,27 @@
 set -euo pipefail
 
 # Default values
-EXT_PATH="$(cd "$(dirname "$0")/.." && pwd -W 2>/dev/null || pwd)"
+EXT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE_DIR="Default"
 CREATE_SHORTCUT=0
 SHORTCUT_NAME="Brave - Data Poisoner: Active Warfare"
+
+is_windows() {
+  case "$(uname -s 2>/dev/null || echo '')" in
+    MINGW*|MSYS*|CYGWIN*) return 0;;
+    *) return 1;;
+  esac
+}
+
+abs_path() {
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$1"
+  else
+    (cd "$1" && pwd)
+  fi
+}
+
+EXT_PATH="$(abs_path "$(cd "$(dirname "$0")/.." && pwd)")"
 
 print_help() {
   cat <<EOF
@@ -47,6 +64,10 @@ done
 
 # Resolve Windows-style path for Brave args
 normpath_windows() {
+  if ! is_windows; then
+    printf '%s' "$1"
+    return 0
+  fi
   # Prefer pwd -W in Git Bash for Windows path, fallback to cygpath if available
   if command -v cygpath >/dev/null 2>&1; then
     cygpath -w "$1"
@@ -70,24 +91,36 @@ fi
 
 # Find Brave executable
 find_brave() {
-  local CANDIDATES=(
-    "/c/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
-    "/c/Program Files (x86)/BraveSoftware/Brave-Browser/Application/brave.exe"
-    "$LOCALAPPDATA/BraveSoftware/Brave-Browser/Application/brave.exe"
-  )
-  for p in "${CANDIDATES[@]}"; do
-    [[ -n "$p" && -f "$p" ]] && { echo "$p"; return 0; }
-  done
-  # PATH lookup
-  if command -v brave.exe >/dev/null 2>&1; then
-    command -v brave.exe; return 0
+  if is_windows; then
+    local CANDIDATES=(
+      "/c/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
+      "/c/Program Files (x86)/BraveSoftware/Brave-Browser/Application/brave.exe"
+      "$LOCALAPPDATA/BraveSoftware/Brave-Browser/Application/brave.exe"
+    )
+    for p in "${CANDIDATES[@]}"; do
+      [[ -n "$p" && -f "$p" ]] && { echo "$p"; return 0; }
+    done
+    if command -v brave.exe >/dev/null 2>&1; then
+      command -v brave.exe; return 0
+    fi
+    echo ""; return 1
   fi
+
+  local CANDIDATES_LINUX=(
+    "brave-browser"
+    "brave"
+  )
+  for b in "${CANDIDATES_LINUX[@]}"; do
+    if command -v "$b" >/dev/null 2>&1; then
+      command -v "$b"; return 0
+    fi
+  done
   echo ""; return 1
 }
 
 BRAVE_PATH="$(find_brave || true)"
 if [[ -z "$BRAVE_PATH" ]]; then
-  echo "[!] Brave executable not found. Install Brave or add brave.exe to PATH." >&2
+  echo "[!] Brave executable not found. Install Brave or add it to PATH." >&2
   exit 1
 fi
 
@@ -99,8 +132,14 @@ ARGS=("--profile-directory=$PROFILE_DIR" "--load-extension=$EXT_WIN")
 launch_brave() {
   # If Brave is already running, Chromium may ignore new process flags.
   # Best practice: close all Brave windows before running this loader.
-  if tasklist.exe 2>/dev/null | grep -qiE '^brave\.exe\s'; then
-    echo "[!] Brave appears to be running already. Close all Brave windows first for --load-extension to take effect." >&2
+  if is_windows; then
+    if tasklist.exe 2>/dev/null | grep -qiE '^brave\.exe\s'; then
+      echo "[!] Brave appears to be running already. Close all Brave windows first for --load-extension to take effect." >&2
+    fi
+  else
+    if command -v pgrep >/dev/null 2>&1 && (pgrep -x brave-browser >/dev/null 2>&1 || pgrep -x brave >/dev/null 2>&1); then
+      echo "[!] Brave appears to be running already. Close all Brave windows first for --load-extension to take effect." >&2
+    fi
   fi
 
   # Launch the Windows .exe directly; background it so Git Bash remains usable.
@@ -110,6 +149,10 @@ launch_brave() {
 
 # Create Desktop .bat launcher (no PowerShell)
 create_bat_shortcut() {
+  if ! is_windows; then
+    echo "[!] --create-shortcut is only supported on Windows." >&2
+    return 1
+  fi
   local desktop batpath brave_win
   desktop=$(printf "%s" "$USERPROFILE" | sed 's|\\|/|g')
   desktop="$desktop/Desktop"
