@@ -95,12 +95,17 @@ fi
 EXT_WIN="$(normpath_windows "$EXT_PATH")"
 ARGS=("--profile-directory=$PROFILE_DIR" "--load-extension=$EXT_WIN")
 
-# Launch Brave detached via cmd.exe (so this shell can exit)
+# Launch Brave detached (avoid switching this terminal into cmd.exe)
 launch_brave() {
-  local brave_win
-  brave_win="$(normpath_windows "$BRAVE_PATH")"
-  # Use cmd start to detach; empty title argument "" required
-  cmd.exe /c start "" "$brave_win" ${ARGS[@]}
+  # If Brave is already running, Chromium may ignore new process flags.
+  # Best practice: close all Brave windows before running this loader.
+  if tasklist.exe 2>/dev/null | grep -qiE '^brave\.exe\s'; then
+    echo "[!] Brave appears to be running already. Close all Brave windows first for --load-extension to take effect." >&2
+  fi
+
+  # Launch the Windows .exe directly; background it so Git Bash remains usable.
+  # shellcheck disable=SC2086
+  "$BRAVE_PATH" ${ARGS[@]} >/dev/null 2>&1 &
 }
 
 # Create Desktop .bat launcher (no PowerShell)
