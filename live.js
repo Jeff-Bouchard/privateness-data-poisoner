@@ -28,230 +28,156 @@
   const tbody = $('body');
   const statusEl = $('status');
   const wrap = $('wrap');
+  const filterBtnDnr = document.getElementById('filterDnr');
+  const filterBtnPoison = document.getElementById('filterPoison');
+  const filterBtnWipe = document.getElementById('filterWipe');
+  const filterBtnOther = document.getElementById('filterOther');
+  const filterBtnAll = document.getElementById('filterAll');
+
+  const filters = { dnr: true, poison: true, wipe: true, other: true };
+
+  function applyFilters(){
+    if (!tbody) return;
+    try {
+      const rows = tbody.children;
+      for (let i = 0; i < rows.length; i++){
+        const r = rows[i];
+        if (!r || !r.dataset) continue;
+        const kind = r.dataset.kind || 'other';
+        r.style.display = kindAllowed(kind) ? '' : 'none';
+      }
+    } catch {}
+  }
+
+  function updateFilterButtons(){
+    try {
+      if (filterBtnDnr) filterBtnDnr.classList.toggle('active', !!filters.dnr);
+      if (filterBtnPoison) filterBtnPoison.classList.toggle('active', !!filters.poison);
+      if (filterBtnWipe) filterBtnWipe.classList.toggle('active', !!filters.wipe);
+      if (filterBtnOther) filterBtnOther.classList.toggle('active', !!filters.other);
+      if (filterBtnAll) {
+        const allOn = !!filters.dnr && !!filters.poison && !!filters.wipe && !!filters.other;
+        filterBtnAll.classList.toggle('active', allOn);
+      }
+    } catch {}
+  }
 
   function setStatus(txt){ if(statusEl) statusEl.textContent = txt || ''; }
   function scrollToBottom(){ try { wrap.scrollTop = wrap.scrollHeight; } catch {} }
 
-  async function isWhitelisted(origin, path) {
-    try {
-      const cfg = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
-      if (cfg && cfg.config) {
-        // Check exact domain whitelist
-        if (origin) {
-          const domain = new URL(origin).hostname;
-          if (cfg.config.whitelist && cfg.config.whitelist.some(x => 
-            new URL(x).hostname === domain)) {
-            return 'domain';
-          }
-        }
-        // Check path whitelist
-        if (path) {
-          const pathKey = pathKeyOf(path);
-          if (cfg.config.whitelistPaths && cfg.config.whitelistPaths.includes(pathKey)) {
-            return 'path';
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error checking whitelist status:', e);
-    }
-    return false;
+  function classifyKind(entry){
+    const t = String(entry.type||'').toLowerCase();
+    const r = String(entry.ruleId||'').toLowerCase();
+    if (t === 'dnr') return 'dnr';
+    if (t === 'poison' || r === 'poison') return 'poison';
+    if (t === 'wipe' || r === 'wipe') return 'wipe';
+    return 'other';
   }
 
-  async function isBlacklisted(origin, path) {
-    try {
-      const cfg = await chrome.runtime.sendMessage({ type: 'GET_CONFIG' });
-      if (cfg && cfg.config) {
-        // Check exact domain blacklist
-        if (origin) {
-          const domain = new URL(origin).hostname;
-          if (cfg.config.blacklist && cfg.config.blacklist.some(x => 
-            new URL(x).hostname === domain)) {
-            return 'domain';
-          }
-        }
-        // Check path blacklist
-        if (path) {
-          const pathKey = pathKeyOf(path);
-          if (cfg.config.blacklistPaths && cfg.config.blacklistPaths.includes(pathKey)) {
-            return 'path';
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error checking blacklist status:', e);
-    }
-    return false;
+  function kindAllowed(kind){
+    if (!kind) kind = 'other';
+    return !!filters[kind];
   }
 
-  async function rowFor(entry) {
+  function rowFor(entry){
     const tr = document.createElement('tr');
-    
-    // Time column
-    const t = document.createElement('td'); 
-    t.textContent = timeStr(entry.ts || Date.now()); 
-    tr.appendChild(t);
-    
-    // URL column
+    try { tr.classList.add('log-row'); } catch {}
+    const kind = classifyKind(entry);
+    try { tr.dataset.kind = kind; } catch {}
+    const t = document.createElement('td'); t.textContent = timeStr(entry.ts||Date.now()); tr.appendChild(t);
     const u = document.createElement('td');
-    u.className = 'url-cell';
-    
-    // Always display absolute URL (not just path). If entry.url is relative, resolve against initiator.
-    const urlRaw = String(entry.url || '');
+    // Prefer remote request URL from entry.request.url; fall back to legacy entry.url/initiator.
+    const req = entry && entry.request ? entry.request : {};
+    const primaryUrl = req.url || entry.url || '';
+    const baseForRelative = req.initiator || entry.initiator || location.href;
+    const urlRaw = String(primaryUrl||'');
     let url = urlRaw;
-    try { 
-      url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); 
-    } catch (e) {}
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.textContent = url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.style.color = '#4ea1ff';
-    link.style.textDecoration = 'none';
-    u.appendChild(link);
+    try { url = new URL(urlRaw || '', baseForRelative || location.href).toString(); } catch {}
+    let displayDomain = '';
+    let displayPath = '';
+    try {
+      const urlObj = new URL(url);
+      displayDomain = urlObj.hostname.replace(/^www\./, '');
+      displayPath = urlObj.pathname === '/' ? '' : urlObj.pathname;
+    } catch (e) {
+      const stripped = url.replace(/^https?:\/\//, '').split('?')[0];
+      const slash = stripped.indexOf('/');
+      if (slash === -1) { displayDomain = stripped; displayPath = ''; }
+      else { displayDomain = stripped.slice(0, slash); displayPath = stripped.slice(slash); }
+    }
+    const dSpan = document.createElement('span'); dSpan.textContent = displayDomain; dSpan.className = 'url-domain'; u.appendChild(dSpan);
+    if (displayPath) { const pSpan = document.createElement('span'); pSpan.textContent = displayPath; pSpan.className = 'url-path'; u.appendChild(pSpan); }
     u.title = url;
+    u.style.whiteSpace = 'nowrap'; u.style.overflow = 'hidden'; u.style.textOverflow = 'ellipsis';
     tr.appendChild(u);
-    
-    // Type/Rule column
     const rule = document.createElement('td');
     const type = entry.type || 'event';
     const action = entry.action || '';
-    rule.textContent = `${type}${action ? (' / ' + action) : ''}`;
-    tr.appendChild(rule);
-    
-    // Actions column
-    const act = document.createElement('td');
-    act.className = 'action-buttons';
-    
-    // Only show action buttons for valid, non-extension URLs
-    if (url && !url.startsWith('chrome-extension://')) {
-      const origin = originOf(url);
-      const pathKey = pathKeyOf(url);
-      
-      // Check whitelist/blacklist status
-      const [isW, isB] = await Promise.all([
-        isWhitelisted(origin, url),
-        isBlacklisted(origin, url)
-      ]);
-      
-      // Whitelist Domain button
-      const wlDomBtn = document.createElement('button');
-      wlDomBtn.className = 'whitelist-btn' + (isW ? ' active' : '');
-      wlDomBtn.textContent = isW ? '✓ Whitelisted' : 'Whitelist Domain';
-      wlDomBtn.disabled = !!isW;
-      wlDomBtn.title = isW ? 'This domain is whitelisted' : 'Add domain to whitelist';
-      
-      wlDomBtn.addEventListener('click', async () => {
-        if (!origin) return;
-        try {
-          const res = await chrome.runtime.sendMessage({ 
-            type: 'ADD_TO_WHITELIST', 
-            origin: origin 
-          });
-          
-          if (res?.ok) {
-            wlDomBtn.textContent = '✓ Whitelisted';
-            wlDomBtn.disabled = true;
-            wlDomBtn.className = 'whitelist-btn active';
-            blDomBtn.disabled = false;
-            setStatus(`Whitelisted domain: ${new URL(origin).hostname}`);
-          } else {
-            setStatus(`Failed to whitelist domain: ${res?.error || 'Unknown error'}`);
-          }
-        } catch (e) {
-          setStatus('Error whitelisting domain');
-          console.error('Whitelist domain error:', e);
-        }
-      });
-      
-      // Blacklist Domain button
-      const blDomBtn = document.createElement('button');
-      blDomBtn.className = 'blacklist-btn' + (isB ? ' active' : '');
-      blDomBtn.textContent = isB ? '✓ Blocked' : 'Block Domain';
-      blDomBtn.disabled = !!isB;
-      blDomBtn.title = isB ? 'This domain is blocked' : 'Add domain to blacklist';
-      
-      blDomBtn.addEventListener('click', async () => {
-        if (!origin) return;
-        try {
-          const res = await chrome.runtime.sendMessage({ 
-            type: 'ADD_TO_BLACKLIST', 
-            origin: origin 
-          });
-          
-          if (res?.ok) {
-            blDomBtn.textContent = '✓ Blocked';
-            blDomBtn.disabled = true;
-            blDomBtn.className = 'blacklist-btn active';
-            wlDomBtn.disabled = true; // Can't whitelist if blacklisted
-            setStatus(`Blocked domain: ${new URL(origin).hostname}`);
-          } else {
-            setStatus(`Failed to block domain: ${res?.error || 'Unknown error'}`);
-          }
-        } catch (e) {
-          setStatus('Error blocking domain');
-          console.error('Block domain error:', e);
-        }
-      });
-      
-      // Add buttons to container
-      act.appendChild(wlDomBtn);
-      act.appendChild(blDomBtn);
-      
-      // Add path-based whitelist if there's a meaningful path
-      if (pathKey && pathKey !== origin + '/') {
-        const wlPathBtn = document.createElement('button');
-        wlPathBtn.className = 'whitelist-path-btn' + (isW === 'path' ? ' active' : '');
-        wlPathBtn.textContent = isW === 'path' ? '✓ Path Whitelisted' : 'Whitelist Path';
-        wlPathBtn.disabled = isW === 'path' || isB === 'path';
-        wlPathBtn.title = isW === 'path' ? 'This path is whitelisted' : 
-                         isB === 'path' ? 'This path is blacklisted' :
-                         'Add exact path to whitelist';
-        
-        wlPathBtn.addEventListener('click', async () => {
-          try {
-            const res = await chrome.runtime.sendMessage({ 
-              type: 'ADD_TO_WHITELIST_PATHS', 
-              path: pathKey 
-            });
-            
-            if (res?.ok) {
-              wlPathBtn.textContent = '✓ Path Whitelisted';
-              wlPathBtn.disabled = true;
-              wlPathBtn.className = 'whitelist-path-btn active';
-              setStatus(`Whitelisted path: ${pathKey}`);
-            } else {
-              setStatus(`Failed to whitelist path: ${res?.error || 'Unknown error'}`);
-            }
-          } catch (e) {
-            setStatus('Error whitelisting path');
-            console.error('Whitelist path error:', e);
-          }
-        });
-        
-        act.appendChild(wlPathBtn);
-      }
+    const tag = document.createElement('span');
+    let tagClass = 'tag-event';
+    let tagLabel = type;
+    if (kind === 'dnr'){ tagClass = 'tag-dnr'; tagLabel = 'DNR'; }
+    else if (kind === 'poison'){ tagClass = 'tag-poison'; tagLabel = 'Poison'; }
+    else if (kind === 'wipe'){ tagClass = 'tag-wipe'; tagLabel = 'Wipe'; }
+    tag.className = `tag ${tagClass}`;
+    tag.textContent = tagLabel;
+    rule.appendChild(tag);
+    if (action){
+      const aSpan = document.createElement('span');
+      aSpan.textContent = ' b7 ' + action;
+      aSpan.style.marginLeft = '6px';
+      aSpan.style.color = 'var(--muted)';
+      rule.appendChild(aSpan);
     }
+    tr.appendChild(rule);
+    const act = document.createElement('td');
+    const allowPattern = document.createElement('button'); allowPattern.textContent = 'Allow pattern'; allowPattern.className='secondary';
+    const blockPattern = document.createElement('button'); blockPattern.textContent = 'Block pattern'; blockPattern.className='secondary'; blockPattern.style.marginLeft='6px';
     
-    tr.appendChild(act);
+    allowPattern.addEventListener('click', async ()=>{
+      const key = pathKeyOf(url); if (!key) return;
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_WHITELIST_PATHS', path: key });
+        if (res && res.ok){ allowPattern.textContent = 'Allowed'; allowPattern.disabled = true; setStatus('Pattern added to allow list.'); }
+      } catch {}
+    });
+    blockPattern.addEventListener('click', async ()=>{
+      const key = pathKeyOf(url); if (!key) return;
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'ADD_TO_BLACKLIST_PATHS', path: key });
+        if (res && res.ok){ blockPattern.textContent = 'Blocked'; blockPattern.disabled = true; setStatus('Pattern added to block list.'); }
+      } catch {}
+    });
+    act.appendChild(allowPattern); act.appendChild(blockPattern); tr.appendChild(act);
     return tr;
   }
 
   function clearView(){ if (tbody) tbody.innerHTML = ''; }
 
-  async function renderSnapshot(items){
+  function renderSnapshot(items){
     if (!tbody) return;
     clearView();
     const list = Array.isArray(items) ? items : [];
-    for (const e of list){ tbody.appendChild(await rowFor(e)); }
+    for (const e of list){ tbody.appendChild(rowFor(e)); }
     if (playing) scrollToBottom();
   }
 
-  async function appendEvent(e){
+  function appendEvent(e){
     if (!tbody || !playing) return;
-    tbody.appendChild(await rowFor(e));
+    const tr = rowFor(e);
+    try {
+      const kind = (tr && tr.dataset && tr.dataset.kind) ? tr.dataset.kind : 'other';
+      if (!kindAllowed(kind)) tr.style.display = 'none';
+      tr.classList.add('new');
+      setTimeout(()=>{ try { tr.classList.remove('new'); } catch {} }, 500);
+    } catch {}
+    tbody.appendChild(tr);
+    try {
+      const limit = (typeof bufSize === 'number' && bufSize > 0) ? bufSize * 2 : 50;
+      while (tbody.children.length > limit) {
+        tbody.removeChild(tbody.firstChild);
+      }
+    } catch {}
     scrollToBottom();
   }
 
@@ -284,76 +210,14 @@
     } catch (e) { setStatus('Failed to connect. Retrying…'); setTimeout(connect, 1200); }
   }
 
-  // Add styles for the live log
-  const style = document.createElement('style');
-  style.textContent = `
-    .url-cell {
-      max-width: 300px;
-      word-wrap: break-word;
-      white-space: normal !important;
-      overflow-wrap: break-word;
-      word-break: break-all;
-      line-height: 1.4;
-    }
-    .action-buttons {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      min-width: 300px;
-    }
-    .action-buttons button {
-      white-space: nowrap;
-      margin: 2px 0;
-      padding: 4px 8px;
-      font-size: 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      border: 1px solid transparent;
-    }
-    .whitelist-btn, .whitelist-path-btn {
-      background-color: #2e7d32;
-      color: white;
-      border-color: #1b5e20;
-    }
-    .whitelist-btn:hover, .whitelist-path-btn:hover {
-      background-color: #1b5e20;
-    }
-    .blacklist-btn {
-      background-color: #c62828;
-      color: white;
-      border-color: #b71c1c;
-    }
-    .blacklist-btn:hover {
-      background-color: #b71c1c;
-    }
-    button:disabled {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-    button.active {
-      font-weight: bold;
-      opacity: 0.9;
-    }
-    .whitelist-path-btn {
-      background-color: #1976d2;
-      border-color: #1565c0;
-    }
-    .whitelist-path-btn:hover {
-      background-color: #1565c0;
-    }
-    .whitelist-path-btn.active {
-      background-color: #0d47a1;
-    }
-  `;
-  document.head.appendChild(style);
-
   // UI wiring
   $('playPause')?.addEventListener('click', (e)=>{
     playing = !playing;
     e.currentTarget.textContent = playing ? 'Pause' : 'Play';
     if (playing) scrollToBottom();
   });
-  $('scope')?.addEventListener('click', async (e)=>{
+  const scopeBtn = $('scope');
+  scopeBtn?.addEventListener('click', async ()=>{
     if (scope === 'global') {
       tabId = await detectActiveTab();
       scope = 'tab';
@@ -361,9 +225,38 @@
       scope = 'global';
       tabId = null;
     }
-    const btn = (e && e.currentTarget) || $('scope');
-    if (btn) btn.textContent = `Scope: ${scope === 'global' ? 'Global' : 'This tab'}`;
+    if (scopeBtn) scopeBtn.textContent = `Scope: ${scope === 'global' ? 'Global' : 'This tab'}`;
     subscribe();
+  });
+  if (filterBtnDnr) filterBtnDnr.addEventListener('click', ()=>{
+    filters.dnr = !filters.dnr;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnPoison) filterBtnPoison.addEventListener('click', ()=>{
+    filters.poison = !filters.poison;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnWipe) filterBtnWipe.addEventListener('click', ()=>{
+    filters.wipe = !filters.wipe;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnOther) filterBtnOther.addEventListener('click', ()=>{
+    filters.other = !filters.other;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnAll) filterBtnAll.addEventListener('click', ()=>{
+    const allOn = !!filters.dnr && !!filters.poison && !!filters.wipe && !!filters.other;
+    if (allOn) {
+      filters.dnr = filters.poison = filters.wipe = filters.other = false;
+    } else {
+      filters.dnr = filters.poison = filters.wipe = filters.other = true;
+    }
+    updateFilterButtons();
+    applyFilters();
   });
   $('buf')?.addEventListener('change', (e)=>{
     const v = parseInt(e.currentTarget.value, 10);
@@ -377,6 +270,8 @@
     try {
       tabId = await detectActiveTab();
     } catch {}
+    updateFilterButtons();
+    applyFilters();
     connect();
   })();
 })();

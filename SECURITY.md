@@ -14,7 +14,7 @@
 
 ## Reporting a Vulnerability
 
-Please email security issues to: security@privateness.network
+Please email security issues to: <security@privateness.network>
 
 - Include reproduction steps and impacted versions.
 - Do not include sensitive personal data in reports.

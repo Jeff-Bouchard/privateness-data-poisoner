@@ -10,17 +10,20 @@ Privacy extension for Chromium/Brave that reduces telemetry and fingerprinting. 
 1. Open brave://extensions
 2. Enable "Developer mode".
 3. Click "Load unpacked" and choose the cloned project folder (this repo's root directory).
-4. The options page opens in a tab (MV3 `options_ui`). Select a mode (default: Moderate).
+4. The options page opens in a tab (MV3 `options_ui`). Select a mode (default: Strict + Data Poisoning).
 5. To apply edits, click "Update" (and/or the circular Reload icon) on the extension card.
 
 ## What it does
 
 - Strips common tracking params from URLs (DNR removeParams + link sanitation in `content.js`).
 - Blocks/redirects many analytics beacons/pixels to `204.html` (see `rules_analytics.json`).
-- Page‑world protections in `injector.js` add deterministic per‑origin noise and clamps:
+- Page‑world protections in `injector.js` add deterministic, per‑origin noise and clamps:
   - Canvas/WebGL/Audio noise, `performance.now()` quantization, `Date.now()` skew/quantize, `navigator`/Intl clamps, storage hygiene.
 - Strict mode additionally poisons analytics payloads (sendBeacon/fetch/XHR) with plausible synthetic data instead of just suppressing.
+  - Persona/seed strategy is partitioned so each tracker origin sees a different synthetic identity per top-level site.
+  - Payloads include additional synthetic funnel/attribution fields to degrade downstream profiling/ML.
 - Live threat counter and Recent threats panel show DNR matches and poisoning events.
+- Live Log (tab) provides a real-time event stream and reuses an existing `live.html` tab if one is already open.
 
 ## Files
 
@@ -87,12 +90,14 @@ These options affect how synthetic analytics payloads are built in Strict mode:
 - Include synthetic request ID (rid): adds a non-identifying request identifier.
 - Include timing jitter: adds small random timing to reduce correlatability.
 - Include synthetic PII hints: when JSON is used, optionally add clearly fake fields (email/name/phone). Off by default.
+- Meme banner (opt-in): injects a deterministic, rotating banner string into poisoned payloads.
 - Custom defunct brand/company names: optional list used to replace brand/org/vendor fields in poisoned JSON for added plausibility.
 
 Notes:
 
 - Logs and previews exclude personal data. They only show compact synthetic payload snippets.
 - Whitelisted origins bypass poisoning and suppression entirely.
+- Strict poisoning may include additional synthetic funnel fields (e.g. A/B group, synthetic conversion value, synthetic session id).
 
 ## Whitelist
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Privateness.network — Data Protection",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "minimum_chrome_version": "100",
   "description": "Manifest V3 extension that mitigate telemetry and fingerprinting attack surfaces by blocking or data poisoning",
   "action": {
@@ -17,7 +17,8 @@
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
     "storage",
-    "tabs"
+    "tabs",
+    "browsingData"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -52,6 +53,7 @@
     {
       "resources": [
         "injector.js",
+        "schemas/adultPersona.js",
         "204.html"
       ],
       "matches": ["<all_urls>"]

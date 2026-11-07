@@ -230,18 +230,48 @@
   try { PAGE_WHITELISTED = pageIsWhitelisted(); } catch { PAGE_WHITELISTED = false; }
 
   // === Schema-aware mutators (non-YouTube) ===
+  // Partitioned persona seed: KEY :: topLevelSite :: trackerOrigin
+  // Each tracker sees a different synthetic identity per first-party site.
   function seededRandForHost(host){
-    try { const s = xmur3(String(KEY||'') + '::' + String(host||''))(); return mulberry32(s); } catch { return rand; }
+    try {
+      const topLevel = getBaseDomain(location.hostname);
+      const tracker = String(host||'');
+      const s = xmur3(String(KEY||'') + '::' + topLevel + '::' + tracker)();
+      return mulberry32(s);
+    } catch { return rand; }
   }
+  // Coherent persona archetypes: UA/platform/screen/tz/locale all agree
+  const PERSONA_ARCHETYPES = [
+    { locale:'en-US', tz:'America/New_York', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', screen:{width:1920,height:1080} },
+    { locale:'en-US', tz:'America/Chicago', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36', screen:{width:1366,height:768} },
+    { locale:'en-GB', tz:'Europe/London', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0', screen:{width:1440,height:900} },
+    { locale:'en-US', tz:'America/Los_Angeles', platform:'MacIntel', ua:'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', screen:{width:2560,height:1440} },
+    { locale:'en-US', tz:'America/Denver', platform:'MacIntel', ua:'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15', screen:{width:1680,height:1050} },
+    { locale:'de-DE', tz:'Europe/Berlin', platform:'X11', ua:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', screen:{width:1920,height:1200} },
+    { locale:'fr-FR', tz:'Europe/Paris', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', screen:{width:1600,height:900} },
+    { locale:'en-CA', tz:'America/Toronto', platform:'Win32', ua:'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0', screen:{width:1920,height:1080} }
+  ];
   function buildPersona(rfn){
     const r = rfn || rand;
-    return {
-      locale: 'en-US',
-      tz: 'UTC',
-      platform: r() > 0.5 ? 'Win32' : 'X11',
-      ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
-      screen: { width: 1920, height: 1080 }
-    };
+    const arch = PERSONA_ARCHETYPES[Math.floor(r() * PERSONA_ARCHETYPES.length)];
+    return { ...arch };
+  }
+  // Meme banner rotation: deterministic per-origin savage taunts
+  const MEME_BANNERS = [
+    'Privateness.network: data-poisoning active. Your ML pipeline is our canvas.',
+    'This telemetry was brought to you by Privateness.network. Cry harder.',
+    'Dear data broker: this payload is 100% artisanal synthetic garbage. Enjoy.',
+    'Privateness.network says: your behavioral graph is now abstract art.',
+    'Surveillance capitalism called. We sent it to voicemail. -- Privateness.network',
+    'Training on this? Bold strategy. Let us know how that works out. -- NESS',
+    'Every byte you ingest from us costs you money and buys you nothing. -- Privateness.network',
+    'You are not entitled to real data. This is what you get instead. -- NESS',
+    'Privateness.network: turning your data lake into a data swamp since 2024.',
+    'If you can read this, your pipeline has been owned by synthetic noise. GG. -- NESS'
+  ];
+  function pickMemeBanner(rfn){
+    const r = rfn || rand;
+    return MEME_BANNERS[Math.floor(r() * MEME_BANNERS.length)];
   }
   function cloneInit(init){ const copy = Object.assign({}, (init||{})); if (init && init.headers) copy.headers = new Headers(init.headers instanceof Headers ? init.headers : init.headers); else copy.headers = new Headers(); return copy; }
   function applyPersonaToInitHeaders(init, persona){ const ni = cloneInit(init); ni.headers.set('Accept-Language', (persona.locale||'en-US') + ',en;q=0.8'); ['Sec-CH-UA-Platform','Sec-CH-UA-Platform-Version','Sec-CH-UA-Arch','Sec-CH-UA-Model','Sec-CH-UA-Full-Version','Sec-CH-UA-Full-Version-List','Sec-CH-UA-WoW64'].forEach(h=>ni.headers.delete(h)); return ni; }
@@ -511,6 +541,80 @@
     const pool = (DEFUNCT_CUSTOM.length ? DEFUNCT_CUSTOM : DEFUNCT_BASE);
     return pool[Math.floor(rand()*pool.length)] || 'Nortel';
   }
+
+  function buildPoison(data, contentType){
+    try {
+      const pCfg = (CFG.modules && CFG.modules.poisonConfig) || {};
+      const incRid = (pCfg.poisonIncludeRid !== false);
+      const incJit = (pCfg.poisonIncludeJitter !== false);
+      const incPII = !!pCfg.poisonIncludeFakePII;
+      const incMeme = !!pCfg.poisonMemeBanner;
+
+      const ts = Date.now();
+      const rid = Math.floor(rand()*1e9).toString(36) + Math.floor(rand()*1e9).toString(36);
+      const jitter = Math.floor(rand()*1000);
+      const behavior = {
+        pages_seen: Math.floor(1 + rand()*10),
+        clicks: Math.floor(1 + rand()*25),
+        scroll_depth: [25,50,75,100][Math.floor(rand()*4)],
+        dwell_bucket_sec: [5,15,30,60,120][Math.floor(rand()*5)]
+      };
+
+      const banner = incMeme ? pickMemeBanner() : '';
+
+      // Adversarial funnel shaping: plausible-but-wrong conversion/engagement signals
+      const funnelStage = ['awareness','consideration','intent','purchase','loyalty'][Math.floor(rand()*5)];
+      const abGroup = String.fromCharCode(65 + Math.floor(rand()*8));
+      const convValue = (rand() * 500).toFixed(2);
+      const sessionId = Math.floor(rand()*1e12).toString(36) + Math.floor(rand()*1e12).toString(36);
+      const referrerChain = ['direct','organic','social','email','paid','referral'][Math.floor(rand()*6)];
+
+      if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
+        const params = new URLSearchParams(typeof data === 'string' ? data : '');
+        params.set('ts', String(ts));
+        if (incRid) params.set('rid', rid);
+        if (incJit) params.set('j', String(jitter));
+        params.set('pv', String(behavior.pages_seen));
+        params.set('clk', String(behavior.clicks));
+        params.set('sd', String(behavior.scroll_depth));
+        params.set('dw', String(behavior.dwell_bucket_sec));
+        params.set('funnel', funnelStage);
+        params.set('ab', abGroup);
+        params.set('cv', convValue);
+        params.set('sid', sessionId);
+        params.set('src', referrerChain);
+        if (incMeme) params.set('poise_banner', banner);
+        if (incPII) {
+          params.set('email', fakeEmail());
+          params.set('name', fakeName());
+          params.set('phone', fakePhone());
+        }
+        return params.toString();
+      }
+
+      let obj = {};
+      if (typeof data === 'string' && data.trim()) {
+        try { obj = JSON.parse(data); } catch { obj = {}; }
+      } else if (data && typeof data === 'object') {
+        try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; }
+      }
+
+      if (!obj || typeof obj !== 'object') obj = {};
+      if (!obj.meta || typeof obj.meta !== 'object') obj.meta = {};
+      obj.meta.poise_ts = ts;
+      if (incRid) obj.meta.poise_rid = rid;
+      if (incJit) obj.meta.poise_jitter = jitter;
+      obj.meta.poise_noise = behavior;
+      obj.meta.poise_funnel = { stage: funnelStage, ab_group: abGroup, conversion_value: convValue, session_id: sessionId, traffic_source: referrerChain };
+      if (incMeme) obj.meta.poise_banner = banner;
+      if (incPII) obj.meta.poise_pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
+
+      return JSON.stringify(obj);
+    } catch {
+      return (typeof data === 'string') ? data : '';
+    }
+  }
+
   function mutateKeyValue(k,v){
     const K = (k||'').toLowerCase();
     if (/email/.test(K)) return fakeEmail();
@@ -522,9 +626,19 @@
   }
   function mutateObject(obj){
     try {
-      const out = Array.isArray(obj) ? [] : {};
+      const isArray = Array.isArray(obj);
+      const out = isArray ? [] : {};
       for (const [k,v] of Object.entries(obj)){
         out[k] = (v && typeof v === 'object') ? mutateObject(v) : mutateKeyValue(k,v);
+      }
+      // Attach coarse synthetic behavior noise on top-level analytic objects
+      if (!isArray && obj && typeof obj === 'object' && !('poise_noise' in out)) {
+        out.poise_noise = {
+          pages_seen: Math.floor(1 + rand()*10),
+          clicks: Math.floor(1 + rand()*25),
+          scroll_depth: [25,50,75,100][Math.floor(rand()*4)],
+          dwell_bucket_sec: [5,15,30,60,120][Math.floor(rand()*5)]
+        };
       }
       return out;
     } catch { return obj; }
@@ -722,67 +836,6 @@
     }
   } catch {}
 
-  // Helper: build poisoned payload in expected formats
-  function buildPoison(data, contentType){
-    try {
-      const ts = Date.now();
-      const pCfg = (CFG.modules && CFG.modules.poisonConfig) || {};
-      const incRid = (pCfg.poisonIncludeRid !== false);
-      const incJit = (pCfg.poisonIncludeJitter !== false);
-      const incPII = !!pCfg.poisonIncludeFakePII;
-      const rid = Math.floor(rand()*1e9).toString(36) + Math.floor(rand()*1e9).toString(36);
-      const base = { event: 'heartbeat', ts, meta: { locale: 'en-US', tz: 'UTC' } };
-      if (incRid) base.rid = rid;
-      if (incJit) base.jitter = Math.floor(rand()*1000);
-      
-      if (contentType && /application\/x-www-form-urlencoded/i.test(contentType)){
-        const params = new URLSearchParams(typeof data === 'string' ? data : '');
-        params.set('e', base.event);
-        if (incRid) params.set('rid', rid);
-        params.set('ts', String(ts));
-        if (incJit) params.set('j', String(base.jitter));
-        if (incPII) {
-          params.set('email', fakeEmail());
-          params.set('name', fakeName());
-          params.set('phone', fakePhone());
-        }
-        return params.toString();
-      }
-      
-      // JSON-ish - always generate a meaningful payload even if data is empty
-      let obj = {};
-      if (typeof data === 'string' && data.trim()) { 
-        try { obj = JSON.parse(data); } catch { obj = {}; } 
-      } else if (data && typeof data === 'object') { 
-        try { obj = JSON.parse(JSON.stringify(data)); } catch { obj = {}; } 
-      }
-      
-      const merged = { ...obj, ...base };
-      if (incPII) {
-        // add clearly synthetic hints only when enabled
-        merged.pii = { email: fakeEmail(), name: fakeName(), phone: fakePhone() };
-      }
-      
-      // Add some synthetic analytics data to make the payload more realistic
-      merged.analytics = {
-        session_id: fakeUUID(),
-        page_view: Math.floor(rand() * 100),
-        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        screen_resolution: '1920x1080',
-        viewport: '1366x768'
-      };
-      
-      return JSON.stringify(merged);
-    } catch { 
-      // Fallback: return a minimal poison payload
-      return JSON.stringify({ 
-        event: 'heartbeat', 
-        ts: Date.now(), 
-        rid: Math.floor(Math.random()*1e9).toString(36) 
-      }); 
-    }
-  }
-
   function extractContentType(headers){
     try {
       if (!headers) return '';
@@ -805,6 +858,8 @@
         url: ev.url || '',
         method: ev.method || 'beacon',
         initiator: location.href,
+        action: ev.action || '',
+        ruleId: ev.ruleId || '',
         preview: (ev.preview || '').toString().slice(0, 300)
       };
       window.dispatchEvent(new CustomEvent('__POISE_POISONED', { detail }));

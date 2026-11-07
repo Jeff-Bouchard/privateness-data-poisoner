@@ -46,22 +46,67 @@
     } catch {}
     return false;
   }
+  // Get current tab ID for tab-based whitelist checks
+  let tabId = null;
+  try {
+    const tabResponse = await sendToSW({ type: 'GET_TAB_ID' });
+    if (tabResponse && tabResponse.ok && typeof tabResponse.tabId === 'number') {
+      tabId = tabResponse.tabId;
+    }
+  } catch {}
+
+  function isWhitelisted(url) {
+    try {
+      const u = new URL(url, location.href);
+      const origin = u.origin;
+      const pathKey = origin + u.pathname + (u.pathname.endsWith('/') ? '' : '/');
+      
+      // Check global origin whitelist
+      if (cfg.whitelist && cfg.whitelist.includes(origin)) return true;
+      
+      // Check global path whitelist
+      if (cfg.whitelistPaths && cfg.whitelistPaths.some(p => pathKey.startsWith(p))) return true;
+      
+      // Check tab-specific bearer's authority whitelist for origins
+      if (tabId && cfg.tabWhitelist && cfg.tabWhitelist[tabId]) {
+        if (cfg.tabWhitelist[tabId].includes(origin)) return true;
+      }
+      
+      // Check tab-specific bearer's authority whitelist for paths
+      if (tabId && cfg.tabWhitelistPaths && cfg.tabWhitelistPaths[tabId]) {
+        for (const pathEntry of cfg.tabWhitelistPaths[tabId]) {
+          try {
+            const k = new URL(pathEntry);
+            if (k.hostname !== u.hostname) continue; // exact host only
+            // Normalize trailing slash semantics for exact path and subpaths
+            const reqPath = u.pathname || '/';
+            const keyPath = k.pathname || '/';
+            const reqDir = reqPath.endsWith('/') ? reqPath : (reqPath + '/');
+            const keyDir = keyPath.endsWith('/') ? keyPath : (keyPath + '/');
+            // Exact path match should succeed regardless of trailing slash
+            if (reqPath === keyPath || (reqPath + '/') === keyDir || (keyPath + '/') === reqDir) return true;
+            // Subpath match
+            if (reqDir.startsWith(keyDir)) return true;
+          } catch {}
+        }
+      }
+    } catch {}
+    return false;
+  }
   function isWhitelistedPath(urlStr){
     try {
       const u = new URL(urlStr);
+      const pathKey = u.origin + u.pathname + (u.pathname.endsWith('/') ? '' : '/');
       const list = Array.isArray(cfg.whitelistPaths) ? cfg.whitelistPaths : [];
-      for (const key of list){
+      for (const path of list){
         try {
-          const k = new URL(key);
+          const k = new URL(path);
           if (k.hostname !== u.hostname) continue; // exact host only
-          // Normalize trailing slash semantics for exact path and subpaths
           const reqPath = u.pathname || '/';
           const keyPath = k.pathname || '/';
           const reqDir = reqPath.endsWith('/') ? reqPath : (reqPath + '/');
           const keyDir = keyPath.endsWith('/') ? keyPath : (keyPath + '/');
-          // Exact path match should succeed regardless of trailing slash
           if (reqPath === keyPath || (reqPath + '/') === keyDir || (keyPath + '/') === reqDir) return true;
-          // Subpath match
           if (reqDir.startsWith(keyDir)) return true;
         } catch {}
       }
@@ -70,7 +115,7 @@
   }
   function pageIsWhitelisted(){
     const href = location.href;
-    return isWhitelistedOrigin(href) || isWhitelistedPath(href);
+    return isWhitelistedOrigin(href) || isWhitelistedPath(href) || isWhitelisted(href);
   }
 
   // If current page is whitelisted, act as fully disabled
@@ -86,10 +131,12 @@
     try {
       bridge.setAttribute('data-cfg', JSON.stringify(cfg));
       bridge.setAttribute('data-key', perOriginKey);
+      bridge.setAttribute('data-tab-id', tabId); // pass tabId to page world
     } catch {}
     (document.documentElement || document.head || document.body).appendChild(bridge);
 
     const s = document.createElement('script');
+    s.type = 'module';
     s.src = chrome.runtime.getURL('injector.js');
     s.async = false;
     (document.documentElement || document.head || document.body).appendChild(s);
