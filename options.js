@@ -38,6 +38,26 @@ function timeFull(ts){
 // Live log (tab) removed
 
 // Preview modal wiring
+document.getElementById('seeAsTab')?.addEventListener('click', async ()=>{
+  try {
+    const url = chrome.runtime.getURL('live.html');
+    if (!(chrome.tabs && chrome.tabs.query && chrome.tabs.update && chrome.tabs.create)) {
+      window.open(url, '_blank');
+      return;
+    }
+    const tabs = await chrome.tabs.query({ url });
+    if (Array.isArray(tabs) && tabs.length && typeof tabs[0].id === 'number') {
+      const t = tabs[0];
+      try { await chrome.tabs.update(t.id, { active: true }); } catch {}
+      if (typeof t.windowId === 'number' && chrome.windows && chrome.windows.update) {
+        try { await chrome.windows.update(t.windowId, { focused: true }); } catch {}
+      }
+    } else {
+      await chrome.tabs.create({ url });
+    }
+  } catch {}
+});
+
 function openPreview(text, meta){
   try {
     const modal = document.getElementById('previewModal');
@@ -55,6 +75,47 @@ function closePreview(){
 }
 document.getElementById('previewClose')?.addEventListener('click', closePreview);
 document.getElementById('previewModal')?.addEventListener('click', (e)=>{ if (e.target && e.target.id === 'previewModal') closePreview(); });
+
+// Wipe Browsing Data wiring
+function collectWipeTypes(){
+  const map = {
+    wd_history: 'history',
+    wd_downloads: 'downloads',
+    wd_cookies: 'cookies',
+    wd_cache: 'cache',
+    wd_cacheStorage: 'cacheStorage',
+    wd_localStorage: 'localStorage',
+    wd_indexedDB: 'indexedDB',
+    wd_serviceWorkers: 'serviceWorkers',
+    wd_webSQL: 'webSQL',
+    wd_fileSystems: 'fileSystems',
+    wd_formData: 'formData',
+    wd_passwords: 'passwords',
+    wd_autofill: 'autofill',
+    wd_siteSettings: 'siteSettings',
+    wd_pluginData: 'pluginData',
+    wd_appcache: 'appcache'
+  };
+  const out = [];
+  for (const id in map){ const el = document.getElementById(id); if (el && el.checked) out.push(map[id]); }
+  return out;
+}
+async function doWipe(){
+  const btn = document.getElementById('wd_wipe');
+  const status = document.getElementById('wd_status');
+  const preset = document.getElementById('wd_preset')?.value || 'all';
+  const types = collectWipeTypes();
+  if (!types.length){ if (status){ status.textContent = 'Select at least one type'; status.className='small'; } return; }
+  try {
+    btn.disabled = true; if (status){ status.textContent = 'Wiping…'; status.className='small'; }
+    const res = await chrome.runtime.sendMessage({ type: 'WIPE_DATA', preset, types });
+    if (res && res.ok){ if (status){ status.textContent = `Done (${(res.wiped||[]).length} types)`; status.className='small ok'; } }
+    else { if (status){ status.textContent = `Failed: ${res && res.error ? res.error : 'unknown error'}`; status.className='small'; } }
+  } catch (e) {
+    if (status){ status.textContent = `Error: ${String(e&&e.message||e)}`; status.className='small'; }
+  } finally { btn.disabled = false; setTimeout(()=>{ if (status) status.textContent=''; }, 2000); }
+}
+document.getElementById('wd_wipe')?.addEventListener('click', doWipe);
 // Copy preview
 async function copyPreview(){
   try {
@@ -241,7 +302,7 @@ async function loadConfig(){
   const cfg = (res && res.ok) ? res.config : null;
   if (!cfg) return;
   const mode = document.getElementById('mode');
-  if (mode) mode.value = cfg.mode || 'moderate';
+  if (mode) mode.value = cfg.mode || 'strict';
   const ids = ['canvasNoise','audioNoise','webglNoise','perfQuantize','navigatorClamp','storageHygiene','blockBeacons'];
   for (const id of ids){
     const el = document.getElementById(id);
@@ -274,12 +335,14 @@ async function loadConfig(){
   const pc = (cfg.modules && cfg.modules.poisonConfig) || {};
   const pcIds = ['poisonIncludeRid','poisonIncludeJitter','poisonIncludeFakePII'];
   pcIds.forEach((id)=>{ const el = document.getElementById(id); if (el) el.checked = (pc[id] !== false); });
+  const meme = document.getElementById('poisonMemeBanner');
+  if (meme) meme.checked = !!pc.poisonMemeBanner;
   // Custom defunct names list
   renderDefunctList(Array.isArray(pc.defunctNames) ? pc.defunctNames : []);
 }
 
 async function saveConfig(){
-  const mode = document.getElementById('mode')?.value || 'moderate';
+  const mode = document.getElementById('mode')?.value || 'strict';
   const ids = ['canvasNoise','audioNoise','webglNoise','perfQuantize','navigatorClamp','storageHygiene','blockBeacons'];
   const modules = {};
   for (const id of ids){
@@ -292,6 +355,7 @@ async function saveConfig(){
     poisonIncludeRid: !!document.getElementById('poisonIncludeRid')?.checked,
     poisonIncludeJitter: !!document.getElementById('poisonIncludeJitter')?.checked,
     poisonIncludeFakePII: !!document.getElementById('poisonIncludeFakePII')?.checked,
+    poisonMemeBanner: !!document.getElementById('poisonMemeBanner')?.checked,
     defunctNames: getDefunctList()
   };
   modules.poisonConfig = poisonConfig;

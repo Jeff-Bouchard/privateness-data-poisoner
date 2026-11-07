@@ -28,37 +28,107 @@
   const tbody = $('body');
   const statusEl = $('status');
   const wrap = $('wrap');
+  const filterBtnDnr = document.getElementById('filterDnr');
+  const filterBtnPoison = document.getElementById('filterPoison');
+  const filterBtnWipe = document.getElementById('filterWipe');
+  const filterBtnOther = document.getElementById('filterOther');
+  const filterBtnAll = document.getElementById('filterAll');
+
+  const filters = { dnr: true, poison: true, wipe: true, other: true };
+
+  function applyFilters(){
+    if (!tbody) return;
+    try {
+      const rows = tbody.children;
+      for (let i = 0; i < rows.length; i++){
+        const r = rows[i];
+        if (!r || !r.dataset) continue;
+        const kind = r.dataset.kind || 'other';
+        r.style.display = kindAllowed(kind) ? '' : 'none';
+      }
+    } catch {}
+  }
+
+  function updateFilterButtons(){
+    try {
+      if (filterBtnDnr) filterBtnDnr.classList.toggle('active', !!filters.dnr);
+      if (filterBtnPoison) filterBtnPoison.classList.toggle('active', !!filters.poison);
+      if (filterBtnWipe) filterBtnWipe.classList.toggle('active', !!filters.wipe);
+      if (filterBtnOther) filterBtnOther.classList.toggle('active', !!filters.other);
+      if (filterBtnAll) {
+        const allOn = !!filters.dnr && !!filters.poison && !!filters.wipe && !!filters.other;
+        filterBtnAll.classList.toggle('active', allOn);
+      }
+    } catch {}
+  }
 
   function setStatus(txt){ if(statusEl) statusEl.textContent = txt || ''; }
   function scrollToBottom(){ try { wrap.scrollTop = wrap.scrollHeight; } catch {} }
 
+  function classifyKind(entry){
+    const t = String(entry.type||'').toLowerCase();
+    const r = String(entry.ruleId||'').toLowerCase();
+    if (t === 'dnr') return 'dnr';
+    if (t === 'poison' || r === 'poison') return 'poison';
+    if (t === 'wipe' || r === 'wipe') return 'wipe';
+    return 'other';
+  }
+
+  function kindAllowed(kind){
+    if (!kind) kind = 'other';
+    return !!filters[kind];
+  }
+
   function rowFor(entry){
     const tr = document.createElement('tr');
+    try { tr.classList.add('log-row'); } catch {}
+    const kind = classifyKind(entry);
+    try { tr.dataset.kind = kind; } catch {}
     const t = document.createElement('td'); t.textContent = timeStr(entry.ts||Date.now()); tr.appendChild(t);
     const u = document.createElement('td');
-    // Always display absolute URL (not just path). If entry.url is relative, resolve against initiator.
-    const urlRaw = String(entry.url||'');
+    // Prefer remote request URL from entry.request.url; fall back to legacy entry.url/initiator.
+    const req = entry && entry.request ? entry.request : {};
+    const primaryUrl = req.url || entry.url || '';
+    const baseForRelative = req.initiator || entry.initiator || location.href;
+    const urlRaw = String(primaryUrl||'');
     let url = urlRaw;
-    try { url = new URL(urlRaw, entry && entry.initiator ? entry.initiator : location.href).toString(); } catch {}
-    let displayText = url;
-    
+    try { url = new URL(urlRaw || '', baseForRelative || location.href).toString(); } catch {}
+    let displayDomain = '';
+    let displayPath = '';
     try {
       const urlObj = new URL(url);
-      const domain = urlObj.hostname.replace(/^www\./, '');
-      const path = urlObj.pathname === '/' ? '' : urlObj.pathname;
-      displayText = domain + path;
+      displayDomain = urlObj.hostname.replace(/^www\./, '');
+      displayPath = urlObj.pathname === '/' ? '' : urlObj.pathname;
     } catch (e) {
-      displayText = url.replace(/^https?:\/\//, '').split('?')[0];
+      const stripped = url.replace(/^https?:\/\//, '').split('?')[0];
+      const slash = stripped.indexOf('/');
+      if (slash === -1) { displayDomain = stripped; displayPath = ''; }
+      else { displayDomain = stripped.slice(0, slash); displayPath = stripped.slice(slash); }
     }
-    
-    u.textContent = displayText;
+    const dSpan = document.createElement('span'); dSpan.textContent = displayDomain; dSpan.className = 'url-domain'; u.appendChild(dSpan);
+    if (displayPath) { const pSpan = document.createElement('span'); pSpan.textContent = displayPath; pSpan.className = 'url-path'; u.appendChild(pSpan); }
     u.title = url;
     u.style.whiteSpace = 'nowrap'; u.style.overflow = 'hidden'; u.style.textOverflow = 'ellipsis';
     tr.appendChild(u);
     const rule = document.createElement('td');
     const type = entry.type || 'event';
     const action = entry.action || '';
-    rule.textContent = `${type}${action?(' / '+action):''}`;
+    const tag = document.createElement('span');
+    let tagClass = 'tag-event';
+    let tagLabel = type;
+    if (kind === 'dnr'){ tagClass = 'tag-dnr'; tagLabel = 'DNR'; }
+    else if (kind === 'poison'){ tagClass = 'tag-poison'; tagLabel = 'Poison'; }
+    else if (kind === 'wipe'){ tagClass = 'tag-wipe'; tagLabel = 'Wipe'; }
+    tag.className = `tag ${tagClass}`;
+    tag.textContent = tagLabel;
+    rule.appendChild(tag);
+    if (action){
+      const aSpan = document.createElement('span');
+      aSpan.textContent = ' b7 ' + action;
+      aSpan.style.marginLeft = '6px';
+      aSpan.style.color = 'var(--muted)';
+      rule.appendChild(aSpan);
+    }
     tr.appendChild(rule);
     const act = document.createElement('td');
     const allowPattern = document.createElement('button'); allowPattern.textContent = 'Allow pattern'; allowPattern.className='secondary';
@@ -94,7 +164,20 @@
 
   function appendEvent(e){
     if (!tbody || !playing) return;
-    tbody.appendChild(rowFor(e));
+    const tr = rowFor(e);
+    try {
+      const kind = (tr && tr.dataset && tr.dataset.kind) ? tr.dataset.kind : 'other';
+      if (!kindAllowed(kind)) tr.style.display = 'none';
+      tr.classList.add('new');
+      setTimeout(()=>{ try { tr.classList.remove('new'); } catch {} }, 500);
+    } catch {}
+    tbody.appendChild(tr);
+    try {
+      const limit = (typeof bufSize === 'number' && bufSize > 0) ? bufSize * 2 : 50;
+      while (tbody.children.length > limit) {
+        tbody.removeChild(tbody.firstChild);
+      }
+    } catch {}
     scrollToBottom();
   }
 
@@ -133,7 +216,8 @@
     e.currentTarget.textContent = playing ? 'Pause' : 'Play';
     if (playing) scrollToBottom();
   });
-  $('scope')?.addEventListener('click', async (e)=>{
+  const scopeBtn = $('scope');
+  scopeBtn?.addEventListener('click', async ()=>{
     if (scope === 'global') {
       tabId = await detectActiveTab();
       scope = 'tab';
@@ -141,8 +225,38 @@
       scope = 'global';
       tabId = null;
     }
-    e.currentTarget.textContent = `Scope: ${scope === 'global' ? 'Global' : 'This tab'}`;
+    if (scopeBtn) scopeBtn.textContent = `Scope: ${scope === 'global' ? 'Global' : 'This tab'}`;
     subscribe();
+  });
+  if (filterBtnDnr) filterBtnDnr.addEventListener('click', ()=>{
+    filters.dnr = !filters.dnr;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnPoison) filterBtnPoison.addEventListener('click', ()=>{
+    filters.poison = !filters.poison;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnWipe) filterBtnWipe.addEventListener('click', ()=>{
+    filters.wipe = !filters.wipe;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnOther) filterBtnOther.addEventListener('click', ()=>{
+    filters.other = !filters.other;
+    updateFilterButtons();
+    applyFilters();
+  });
+  if (filterBtnAll) filterBtnAll.addEventListener('click', ()=>{
+    const allOn = !!filters.dnr && !!filters.poison && !!filters.wipe && !!filters.other;
+    if (allOn) {
+      filters.dnr = filters.poison = filters.wipe = filters.other = false;
+    } else {
+      filters.dnr = filters.poison = filters.wipe = filters.other = true;
+    }
+    updateFilterButtons();
+    applyFilters();
   });
   $('buf')?.addEventListener('change', (e)=>{
     const v = parseInt(e.currentTarget.value, 10);
@@ -156,6 +270,8 @@
     try {
       tabId = await detectActiveTab();
     } catch {}
+    updateFilterButtons();
+    applyFilters();
     connect();
   })();
 })();
